@@ -54,15 +54,15 @@ jobs:
       
       - name: List build artifacts
         run: |
-          Write-Host "🔍 Build artifacts created:"
+          Write-Host "Build artifacts created:"
           if (Test-Path "dist") {
             Get-ChildItem dist -Recurse -Name | ForEach-Object {
               $file = Get-Item "dist/$_"
               $size = [math]::Round($file.Length / 1MB, 2)
-              Write-Host "  📄 $_ (${size} MB)"
+              Write-Host "  File: $_ (${size} MB)"
             }
           } else {
-            Write-Host "❌ No dist folder found!"
+            Write-Host "ERROR: No dist folder found!"
             exit 1
           }
         shell: powershell
@@ -79,7 +79,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          Write-Host "🔐 Generating checksums..."
+          Write-Host "Generating checksums..."
           Get-ChildItem *.exe | ForEach-Object {
             $hash = Get-FileHash $_.Name -Algorithm SHA256
             $checksum = "$($hash.Hash.ToLower())  $($_.Name)"
@@ -88,7 +88,7 @@ jobs:
           }
           
           if (Test-Path "checksums.txt") {
-            Write-Host "✅ Checksums file created:"
+            Write-Host "Checksums file created:"
             Get-Content "checksums.txt"
           }
         shell: powershell
