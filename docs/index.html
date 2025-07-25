@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oblysk - Smart Clipboard Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            padding: 2rem 0;
+            text-align: center;
+            color: white;
+        }
+        
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+        
+        .hero {
+            background: white;
+            border-radius: 15px;
+            padding: 3rem;
+            margin: 2rem 0;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #2d3748;
+        }
+        
+        .hero p {
+            font-size: 1.1rem;
+            color: #4a5568;
+            margin-bottom: 2rem;
+        }
+        
+        .download-section {
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 1rem 2rem;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .download-btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        
+        .download-btn.secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+        
+        .download-btn.secondary:hover {
+            background: #cbd5e0;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        
+        .feature {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .feature h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+        
+        .feature ul {
+            list-style: none;
+        }
+        
+        .feature li {
+            padding: 0.3rem 0;
+            color: #4a5568;
+        }
+        
+        .feature li:before {
+            content: "✓ ";
+            color: #48bb78;
+            font-weight: bold;
+        }
+        
+        .quick-start {
+            background: #f7fafc;
+            padding: 2rem;
+            border-radius: 10px;
+            margin: 2rem 0;
+        }
+        
+        .quick-start h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+        }
+        
+        .quick-start ol {
+            color: #4a5568;
+            padding-left: 1.5rem;
+        }
+        
+        .quick-start li {
+            margin: 0.5rem 0;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: white;
+            opacity: 0.8;
+        }
+        
+        .github-link {
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .hero {
+                padding: 2rem;
+            }
+            
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .download-btn {
+                display: block;
+                margin: 10px auto;
+                width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">🎯 Oblysk</div>
+            <div class="tagline">Smart Clipboard Manager for Virtual Consoles</div>
+        </header>
+        
+        <div class="hero">
+            <h1>Enterprise-Grade Clipboard Management</h1>
+            <p>Designed for virtual consoles, remote sessions, and power users who need reliable clipboard functionality where traditional tools fail.</p>
+            
+            <div class="download-section">
+                <a href="https://github.com/AnarchySC/oblysk/releases/latest/download/Oblysk-Portable-Windows.exe" class="download-btn">
+                    Download Portable (Recommended)
+                </a>
+                <a href="https://github.com/AnarchySC/oblysk/releases/latest" class="download-btn secondary">
+                    View All Downloads
+                </a>
+            </div>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>Perfect For</h3>
+                <ul>
+                    <li>VMware vSphere/ESXi consoles</li>
+                    <li>AWS CloudShell and web terminals</li>
+                    <li>iDRAC/iLO/IPMI interfaces</li>
+                    <li>Corporate VDI environments</li>
+                    <li>SSH terminals and command prompts</li>
+                </ul>
+            </div>
+            
+            <div class="feature">
+                <h3>Key Features</h3>
+                <ul>
+                    <li>9-cell grid interface</li>
+                    <li>22+ global hotkeys (Ctrl+Alt+1-9)</li>
+                    <li>Master password protection</li>
+                    <li>System tray integration</li>
+                    <li>Works in virtual consoles</li>
+                </ul>
+            </div>
+            
+            <div class="feature">
+                <h3>Security & Privacy</h3>
+                <ul>
+                    <li>Local data storage only</li>
+                    <li>Encrypted with master password</li>
+                    <li>Activity-based auto-lock</li>
+                    <li>No cloud or telemetry</li>
+                    <li>Open source transparency</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="quick-start">
+            <h3>Quick Start</h3>
+            <ol>
+                <li><strong>Download</strong> Oblysk-Portable-Windows.exe</li>
+                <li><strong>Run</strong> the executable (no installation needed)</li>
+                <li><strong>Setup</strong> your master password when prompted</li>
+                <li><strong>Store</strong> commands/passwords in grid cells (double-click)</li>
+                <li><strong>Paste anywhere</strong> with Ctrl+Alt+1-9</li>
+            </ol>
+        </div>
+        
+        <footer>
+            <p>Built for system administrators, developers, and power users.<br>
+            <a href="https://github.com/AnarchySC/oblysk" class="github-link">View on GitHub</a> | 
+            <a href="https://github.com/AnarchySC/oblysk/issues" class="github-link">Report Issues</a></p>
+        </footer>
+    </div>
+</body>
+</html>
