@@ -1,0 +1,74 @@
+{
+  "name": "oblysk",
+  "version": "1.5.0",
+  "description": "Enterprise-grade console paste tool for Windows virtual consoles",
+  "main": "main.js",
+  "author": "Anarchy Games",
+  "homepage": "https://anarchygames.net",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --windows",
+    "build-portable": "electron-builder --windows portable",
+    "build-installer": "electron-builder --windows nsis",
+    "build-all": "electron-builder --windows nsis --windows portable",
+    "dist": "npm run build-all",
+    "pack": "electron-builder --dir --windows",
+    "clean": "rimraf dist",
+    "rebuild": "npm run clean && npm run build-all"
+  },
+  "build": {
+    "appId": "com.anarchygames.oblysk",
+    "productName": "Oblysk",
+    "copyright": "Copyright © 2025 Anarchy Games",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "package.json",
+      "icon.ico",
+      "tray-icon.png",
+      "README.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-Windows-${arch}.${ext}",
+      "publisherName": "Anarchy Games",
+      "verifyUpdateCodeSignature": false
+    },
+    "portable": {
+      "artifactName": "Oblysk-Portable-Windows.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Oblysk Console Paste Tool",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "displayLanguageSelector": false,
+      "installerLanguages": ["en_US"],
+      "license": null,
+      "warningsAsErrors": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.13.3",
+    "rimraf": "^5.0.5"
+  }
+}
