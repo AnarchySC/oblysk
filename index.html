@@ -1716,7 +1716,7 @@
             </div>
             <div class="speed-control">
                 <label>Speed:</label>
-                <input type="range" class="speed-slider" id="typing-speed" min="10" max="200" value="50">
+                <input type="range" class="speed-slider" id="typing-speed" min="1" max="200" value="5">
                 <span id="speed-value">50ms</span>
             </div>
             
@@ -1803,7 +1803,7 @@
             
             <div class="dev-info-item" onclick="openEmail()">
                 <div class="dev-info-icon">📧</div>
-                <a href="#" class="dev-info-link" onclick="openEmail(); return false;">support@anarchygames.net</a>
+                <a href="#" class="dev-info-link" onclick="openEmail(); return false;"><span class="__cf_email__" data-cfemail="d6a5a3a6a6b9a4a296b7b8b7a4b5beafb1b7bbb3a5f8b8b3a2">[email&#160;protected]</span></a>
             </div>
             
             <div class="dev-info-item" onclick="openWebsite()">
@@ -1981,7 +1981,7 @@
         </div>
     </div>
 
-    <script>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
         // Enhanced global variables
         let ipcRenderer;
         let isElectron = false;
@@ -2306,7 +2306,7 @@ ${'='.repeat(50)}`
         // Configuration with enhanced defaults
         let config = {
             pasteMethod: 'keystrokes',
-            typingSpeed: 50,
+            typingSpeed: 5,
             cells: {},
             cellNames: {},
             clipboardHistory: [],
@@ -2367,31 +2367,31 @@ ${'='.repeat(50)}`
             
             try {
                 updateStartupProgress(0); // Checking environment
-                await delay(200);
+                await delay(20);
                 
                 updateStartupProgress(1); // Loading configuration
                 loadConfig();
-                await delay(300);
+                await delay(20);
                 
                 updateStartupProgress(2); // Initializing grid
                 initializeGrid();
-                await delay(200);
+                await delay(20);
                 
                 updateStartupProgress(3); // Setting up event listeners
                 setupEventListeners();
-                await delay(200);
+                await delay(20);
                 
                 updateStartupProgress(4); // Configuring hotkeys
                 setupGlobalHotkeys();
-                await delay(300);
+                await delay(20);
                 
                 updateStartupProgress(5); // Starting security system
                 setupSecuritySystem();
-                await delay(200);
+                await delay(20);
                 
                 updateStartupProgress(6); // Finalizing startup
                 finalizeStartup();
-                await delay(300);
+                await delay(20);
                 
                 hideStartupOverlay();
                 
@@ -4286,10 +4286,4 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         window.closeDialog = closeDialog;
         window.closeDevInfo = closeDevInfo;
         window.closeSecuritySettings = closeSecuritySettings;
-        window.saveSecuritySettings = saveSecuritySettings;
-        window.toggleGrid = toggleGrid;
-
-        debugLogger.log('success', 'startup', '✓ Oblysk script loaded with enhanced debugging and reverse copy');
-    </script>
-</body>
-</html>
+        window.saveSecuritySettings = saveSecu
