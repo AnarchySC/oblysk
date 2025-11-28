@@ -252,7 +252,7 @@ function createWindow() {
             setupHotkeys();
             startClipboardMonitoring();
             logger.log('success', 'startup', 'Windows application startup complete');
-        }, 10);
+        }, 100);
     });
 
     return mainWindow;
@@ -493,13 +493,12 @@ ipcMain.handle('simulate-keystrokes', async (event, { text, delay }) => {
     }
 });
 
-// Enhanced Windows keystroke simulation - OPTIMIZED for speed
+// Enhanced Windows keystroke simulation
 async function simulateKeystrokesWindows(text, delay, requestId) {
     logger.log('info', 'paste', `[${requestId}] Using optimized Windows keystroke simulation`);
     
     return new Promise((resolve) => {
-        // OPTIMIZED: Larger batch sizes for faster pasting (up to 50 chars per batch)
-        const batchSize = Math.max(5, Math.min(50, Math.floor(500 / Math.max(delay, 1))));
+        const batchSize = Math.max(1, Math.min(20, Math.floor(200 / delay)));
         let index = 0;
         let errors = [];
         
@@ -547,13 +546,11 @@ async function simulateKeystrokesWindows(text, delay, requestId) {
                 }
                 
                 index += batchSize;
-                // OPTIMIZED: Much shorter delay between batches
-                setTimeout(processNextBatch, Math.max(1, delay));
+                setTimeout(processNextBatch, delay * Math.min(batchSize, 5));
             });
         }
         
-        // OPTIMIZED: Reduced initial delay from 200ms to 20ms
-        setTimeout(processNextBatch, 20);
+        setTimeout(processNextBatch, 200);
     });
 }
 
@@ -566,7 +563,7 @@ ipcMain.handle('paste-via-clipboard', async (event, text) => {
         clipboard.writeText(text);
         logger.log('info', 'paste', `[${requestId}] Windows clipboard content set`);
         
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         const result = await executeCommand('powershell', ['-Command', 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")'], 3000, requestId);
         
