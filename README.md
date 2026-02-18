@@ -1,6 +1,6 @@
-# 🎯 Oblysk - Smart Clipboard Manager
+# Oblysk - Smart Clipboard Manager
 
-**Enterprise-grade clipboard management tool designed for virtual consoles, remote sessions, and power users.**
+**Cross-platform clipboard management tool designed for virtual consoles, remote sessions, and power users.**
 
 [![Release](https://img.shields.io/github/v/release/AnarchySC/oblysk)](https://github.com/AnarchySC/oblysk/releases)
 [![License](https://img.shields.io/github/license/AnarchySC/oblysk)](LICENSE)
@@ -8,86 +8,89 @@
 
 ---
 
-## 🚀 Why Oblysk?
+## Why Oblysk?
 
 Traditional clipboard managers fail in virtual consoles, remote desktop sessions, and web-based terminals. Oblysk solves this by providing a **grid-based clipboard system** with **global hotkeys** that work anywhere - even in environments where standard copy/paste breaks down.
 
-### 🎯 Perfect For:
-- 🖥️ **VMware vSphere/ESXi** web consoles
-- ☁️ **AWS CloudShell** and cloud terminals  
-- 🔧 **iDRAC/iLO/IPMI** management interfaces
-- 🏢 **Corporate VDI** environments
-- 🐧 **SSH terminals** and command prompts
-- 🔒 **Secure environments** where clipboard access is restricted
+### Perfect For:
+- **VMware vSphere/ESXi** web consoles
+- **AWS CloudShell** and cloud terminals
+- **iDRAC/iLO/IPMI** management interfaces
+- **Corporate VDI** environments
+- **SSH terminals** and command prompts
+- **Secure environments** where clipboard access is restricted
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-### 🎮 Smart Grid Interface
+### Smart Grid Interface
 - **9-cell grid** for organized clipboard management
 - **Double-click to edit** any cell with your content
 - **Visual indicators** show which cells contain data
 - **Persistent storage** - your data survives app restarts
 
-### ⚡ 22+ Global Hotkeys
-- **`Ctrl+Alt+1-9`** - Paste from grid cells 1-9
+### 22+ Global Hotkeys
+- **`Ctrl+Alt+1-9`** (or `Cmd+Alt` on macOS) - Paste from grid cells 1-9
 - **`Ctrl+Alt+O`** - Toggle main window visibility
 - **`Ctrl+Alt+C`** - Copy to notepad function
 - **`Ctrl+Alt+V`** - Paste on-deck content
 - **`Ctrl+Alt+R`** - Reverse copy functionality
 - **Works system-wide** - even in virtual consoles!
 
-### 🔐 Security & Privacy
+### Security & Privacy
 - **Master password protection** with encryption
 - **Activity-based auto-lock** (configurable timeout)
 - **Manual lock/unlock** capabilities
 - **Local data storage** - nothing sent to cloud
 - **Secure session management**
 
-### 🖥️ System Integration
+### System Integration
 - **System tray operation** - runs quietly in background
-- **Windows startup integration** (optional)
 - **Multi-monitor support**
 - **Minimalist design** - stays out of your way
 
 ---
 
-## 📦 Installation
+## Installation
 
-### Quick Start (Recommended)
+### Windows
 1. **Download** the latest `Oblysk-Portable-Windows.exe` from [Releases](https://github.com/AnarchySC/oblysk/releases)
 2. **Run** the executable (no installation required)
-3. **Setup** your master password when prompted
-4. **Start using** - hotkeys work immediately!
 
-### Alternative Installation Methods
+Or use the NSIS installer (`Oblysk-x.x.x-Windows-x64.exe`) for a full install with Start Menu shortcuts.
 
-#### MSI Installer
+### Linux
+1. **Download** the `.AppImage` or `.deb` from [Releases](https://github.com/AnarchySC/oblysk/releases)
+2. **Install required tools** for paste functionality:
+   - **X11**: `sudo apt install xdotool xclip`
+   - **Wayland**: `sudo apt install wtype wl-clipboard`
+3. **Run** the AppImage (`chmod +x Oblysk-*.AppImage && ./Oblysk-*.AppImage`) or install the .deb
+
+### macOS
+1. **Download** the `.dmg` from [Releases](https://github.com/AnarchySC/oblysk/releases)
+2. **Open** the DMG and drag Oblysk to Applications
+3. **Grant accessibility permissions** when prompted (needed for keystroke simulation)
+
+### Build from Source
 ```bash
-# Download and run the installer
-Oblysk-v1.x.x-Windows-x64.exe
-```
-
-#### Build from Source
-```bash
-# Clone the repository
 git clone https://github.com/AnarchySC/oblysk.git
 cd oblysk
-
-# Install dependencies
 npm install
 
 # Run in development mode
 npm start
 
-# Build executables
-npm run build-win
+# Build for your platform
+npm run build-win     # Windows (nsis + portable)
+npm run build-linux   # Linux (AppImage + deb)
+npm run build-mac     # macOS (dmg)
+npm run build-all     # All platforms
 ```
 
 ---
 
-## 🎮 How to Use
+## How to Use
 
 ### Initial Setup
 1. **Launch Oblysk** - you'll see the 3x3 grid interface
@@ -100,6 +103,13 @@ npm run build-win
 3. **Quick access**: Press `Ctrl+Alt+O` to show/hide the main window
 4. **Lock when away**: Use the security system for privacy
 
+### Paste Methods
+| Method | Windows | Linux (X11) | Linux (Wayland) | macOS |
+|--------|---------|-------------|-----------------|-------|
+| **Keystrokes** | PowerShell SendKeys | xdotool type | wtype | osascript |
+| **Clipboard** | SendKeys Ctrl+V | xdotool key ctrl+v | wtype ctrl+v | osascript Cmd+V |
+| **Shell Paste** | PowerShell SendKeys | xdotool type | wtype | osascript |
+
 ### Pro Tips
 - **Right-click cells** for additional options
 - **Use descriptive names** for frequently-used commands
@@ -108,7 +118,7 @@ npm run build-win
 
 ---
 
-## 🔧 Advanced Features
+## Advanced Features
 
 ### Reverse Copy (`Ctrl+Alt+R`)
 Captures text from difficult environments where standard copy operations fail.
@@ -124,7 +134,7 @@ Automatic locking based on user inactivity (configurable timeout).
 
 ---
 
-## 🛡️ Security Features
+## Security Features
 
 ### Data Encryption
 - All stored data is encrypted using your master password
@@ -142,68 +152,69 @@ Automatic locking based on user inactivity (configurable timeout).
 
 ---
 
-## 🔧 Configuration
+## Troubleshooting
 
-### Lock Timer Settings
-```javascript
-// Default: 480 minutes (8 hours)
-// Configurable through the UI
-```
-
-### Hotkey Customization
-Currently uses fixed hotkey combinations. Custom hotkeys planned for future release.
-
-### Storage Location
-- **Settings**: `%APPDATA%/oblysk/`
-- **Data**: Encrypted and stored locally
-
----
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Hotkeys Not Working
+### Hotkeys Not Working
 - **Check if other apps** are using the same key combinations
-- **Run as administrator** if in a restricted environment
 - **Restart Oblysk** to re-register hotkeys
+- **Linux**: Make sure you're not running a Wayland compositor that blocks global shortcuts
 
-#### Windows Defender Warning
+### Linux: Paste Not Working
+- **X11**: Install xdotool (`sudo apt install xdotool`)
+- **Wayland**: Install wtype (`sudo apt install wtype`)
+- **Check display server**: Run `echo $XDG_SESSION_TYPE` to see if you're on X11 or Wayland
+- Oblysk auto-detects your display server and uses the right tool
+
+### macOS: Accessibility Permission
+- Go to **System Settings > Privacy & Security > Accessibility**
+- Add Oblysk to the allowed apps list
+- This is required for keystroke simulation to work
+
+### Windows Defender Warning
 - This is normal for new executables
-- **Click "More info" → "Run anyway"**
-- **Verify checksum** matches the provided `checksums.txt`
-
-#### App Won't Start
-- **Check Windows version** - requires Windows 10/11
-- **Install Visual C++ Redistributable** if missing
-- **Check antivirus software** - whitelist if necessary
+- **Click "More info" > "Run anyway"**
 
 ### Getting Help
-- 📋 **Report bugs**: [Create an issue](https://github.com/AnarchySC/oblysk/issues/new/choose)
-- 💬 **Get support**: [GitHub Discussions](https://github.com/AnarchySC/oblysk/discussions)
-- 🔧 **Export logs**: Press `Ctrl+Shift+D` in the app
+- **Report bugs**: [Create an issue](https://github.com/AnarchySC/oblysk/issues/new/choose)
+- **Get support**: [GitHub Discussions](https://github.com/AnarchySC/oblysk/discussions)
+- **Export logs**: Press `Ctrl+Shift+D` in the app
 
 ---
 
-## 🛠️ Development
+## System Requirements
+
+### Minimum
+- **OS**: Windows 10+, Ubuntu 20.04+ / Fedora 36+, macOS 11+
+- **RAM**: 4GB
+- **Storage**: 100MB free space
+- **Network**: None required (fully offline)
+
+### Linux Dependencies
+- **X11**: `xdotool` (keystroke simulation), `xclip` or `xsel` (clipboard, optional)
+- **Wayland**: `wtype` (keystroke simulation), `wl-clipboard` (clipboard, optional)
+- **Fallback**: `ydotool` (works on both X11 and Wayland, requires ydotoold service)
+
+---
+
+## Development
 
 ### Tech Stack
 - **Electron** - Cross-platform desktop framework
 - **Node.js** - Runtime environment
-- **HTML/CSS/JavaScript** - Frontend technologies
-- **Native APIs** - Global hotkey registration
+- **HTML/CSS/JavaScript** - Frontend
+- **Platform APIs** - xdotool, wtype, osascript, PowerShell
 
 ### Build Requirements
 - **Node.js 18+**
 - **npm** package manager
-- **Windows** (for Windows builds)
 
 ### Available Scripts
 ```bash
-npm start          # Run in development mode
-npm run build-win  # Build Windows executables
-npm run build-all  # Build for all platforms (CI only)
-npm test           # Run test suite
+npm start            # Run in development mode
+npm run build-win    # Build Windows executables
+npm run build-linux  # Build Linux packages
+npm run build-mac    # Build macOS DMG
+npm run build-all    # Build for all platforms
 ```
 
 ### Contributing
@@ -215,60 +226,19 @@ npm test           # Run test suite
 
 ---
 
-## 📊 System Requirements
+## Platform Support
 
-### Minimum Requirements
-- **OS**: Windows 10 (64-bit) or Windows 11
-- **RAM**: 4GB
-- **Storage**: 100MB free space
-- **Network**: None required (fully offline)
-
-### Recommended
-- **OS**: Windows 11 (latest version)
-- **RAM**: 8GB+ 
-- **Storage**: 500MB free space
-- **Multiple monitors** supported
+- [x] **Windows** (PowerShell + SendKeys)
+- [x] **Linux X11** (xdotool + xclip)
+- [x] **Linux Wayland** (wtype + wl-copy)
+- [x] **macOS** (osascript)
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
-
-- **Electron Community** - Framework and tooling
-- **Node.js Team** - Runtime environment
-- **Contributors** - Everyone who helps improve Oblysk
-
----
-
-## 📈 Roadmap
-
-### Upcoming Features
-- [ ] **Custom hotkey configuration**
-- [ ] **Cloud sync** options (optional)
-- [ ] **Text formatting** preservation
-- [ ] **Command history** tracking
-- [ ] **Plugin system** for extensions
-
-### Platform Support
-- [x] **Windows** (primary focus)
-- [ ] **macOS** (planned)
-- [ ] **Linux** (planned)
-
----
-
-<div align="center">
-
-**⭐ If Oblysk helps your workflow, please consider starring the repository! ⭐**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=AnarchySC/oblysk&type=Timeline)](https://star-history.com/#AnarchySC/oblysk&Timeline)
-
-</div>
-
----
-
-*Built with ❤️ for system administrators, developers, and power users who need reliable clipboard management in challenging environments.*
+*Built with love for system administrators, developers, and power users who need reliable clipboard management in challenging environments.*

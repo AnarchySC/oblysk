@@ -1,18 +1,19 @@
 {
   "name": "oblysk",
-  "version": "1.5.0",
-  "description": "Enterprise-grade console paste tool for Windows virtual consoles",
+  "version": "2.0.0",
+  "description": "Cross-platform console paste tool for Windows, Linux, and macOS",
   "main": "main.js",
   "author": "Anarchy Games",
   "homepage": "https://anarchygames.net",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --windows",
-    "build-portable": "electron-builder --windows portable",
-    "build-installer": "electron-builder --windows nsis",
-    "build-all": "electron-builder --windows nsis --windows portable",
+    "build": "electron-builder",
+    "build-win": "electron-builder --windows nsis --windows portable",
+    "build-linux": "electron-builder --linux AppImage deb",
+    "build-mac": "electron-builder --mac dmg",
+    "build-all": "electron-builder --windows nsis --windows portable --linux AppImage deb --mac dmg",
     "dist": "npm run build-all",
-    "pack": "electron-builder --dir --windows",
+    "pack": "electron-builder --dir",
     "clean": "rimraf dist",
     "rebuild": "npm run clean && npm run build-all"
   },
@@ -29,6 +30,7 @@
       "index.html",
       "package.json",
       "icon.ico",
+      "icon.png",
       "tray-icon.png",
       "README.md"
     ],
@@ -48,6 +50,34 @@
       "artifactName": "${productName}-${version}-Windows-${arch}.${ext}",
       "publisherName": "Anarchy Games",
       "verifyUpdateCodeSignature": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "tray-icon.png",
+      "category": "Utility",
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}",
+      "synopsis": "Console paste tool",
+      "description": "Cross-platform console paste tool with clipboard management, encryption, and global hotkeys"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "tray-icon.png",
+      "category": "public.app-category.utilities",
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}"
     },
     "portable": {
       "artifactName": "Oblysk-Portable-Windows.exe"
