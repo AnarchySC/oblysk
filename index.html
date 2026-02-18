@@ -2635,11 +2635,11 @@ ${'='.repeat(50)}`
         function closeDialog(confirmed) {
             const overlay = document.getElementById('dialog-overlay');
             const input = document.getElementById('dialog-input');
-            
+            const result = confirmed ? input.value : null;
+
             overlay.style.display = 'none';
-            
+
             if (dialogResolve) {
-                const result = confirmed ? input.value : null;
                 debugLogger.log('info', 'dialog', `Dialog closed: ${confirmed ? 'confirmed' : 'cancelled'}`, { result });
                 dialogResolve(result);
                 dialogResolve = null;
