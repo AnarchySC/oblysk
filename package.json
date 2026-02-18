@@ -3,7 +3,10 @@
   "version": "2.0.0",
   "description": "Cross-platform console paste tool for Windows, Linux, and macOS",
   "main": "main.js",
-  "author": "Anarchy Games",
+  "author": {
+    "name": "Anarchy Games",
+    "email": "contact@anarchygames.net"
+  },
   "homepage": "https://anarchygames.net",
   "scripts": {
     "start": "electron .",
