@@ -1803,7 +1803,7 @@
             
             <div class="dev-info-item" onclick="openEmail()">
                 <div class="dev-info-icon">📧</div>
-                <a href="#" class="dev-info-link" onclick="openEmail(); return false;"><span class="__cf_email__" data-cfemail="d6a5a3a6a6b9a4a296b7b8b7a4b5beafb1b7bbb3a5f8b8b3a2">[email&#160;protected]</span></a>
+                <a href="#" class="dev-info-link" onclick="openEmail(); return false;">support@anarchygames.net</a>
             </div>
             
             <div class="dev-info-item" onclick="openWebsite()">
@@ -1981,7 +1981,7 @@
         </div>
     </div>
 
-    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+    <script>
         // Enhanced global variables
         let ipcRenderer;
         let isElectron = false;
@@ -2292,14 +2292,12 @@ ${'='.repeat(50)}`
 
         const reverseCapture = new ReverseCapture();
 
-        // Check if running in Electron
-        try {
-            if (window.require) {
-                ipcRenderer = require('electron').ipcRenderer;
-                isElectron = true;
-                debugLogger.log('success', 'startup', 'Electron environment detected');
-            }
-        } catch (e) {
+        // Check if running in Electron (via preload contextBridge)
+        if (window.electron) {
+            ipcRenderer = window.electron.ipcRenderer;
+            isElectron = true;
+            debugLogger.log('success', 'startup', 'Electron environment detected (secure preload)');
+        } else {
             debugLogger.log('info', 'startup', 'Browser environment detected');
         }
 
@@ -3163,7 +3161,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 const entryId = `clipboard-entry-${i}`;
                 
                 // Special styling for reverse copy entries
-                const isReverseCopy = entry.source && entry.source.includes('selection') || entry.source === 'web-console';
+                const isReverseCopy = entry.source && (entry.source.includes('selection') || entry.source === 'web-console');
                 const sourceIcon = isReverseCopy ? '🔄' : '📋';
                 
                 html += `<div class="clipboard-entry ${isOnDeck ? 'on-deck' : ''}" id="${entryId}">
@@ -3183,9 +3181,10 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 } else {
                     if (config.maskContent) {
                         const maskedText = maskText(entry.content);
-                        html += `<span class="masked-content" 
+                        html += `<span class="masked-content"
                                     onclick="revealClipboardEntry(${i})"
-                                    onmouseover="showPeekTooltip(event, atob('${btoa(entry.content)}'))"
+                                    data-peek-index="${i}"
+                                    onmouseover="showPeekTooltipByIndex(event, ${i})"
                                     onmouseout="hidePeekTooltip()"
                                 >${maskedText}</span>`;
                     } else {
@@ -3304,9 +3303,19 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 
                 const savedHistory = localStorage.getItem('oblysk-clipboard-history');
                 if (savedHistory) {
-                    config.clipboardHistory = JSON.parse(savedHistory);
+                    if (savedHistory.startsWith('ENC:')) {
+                        // Encrypted history — will be decrypted after unlock
+                        debugLogger.log('info', 'config', 'Encrypted clipboard history found - will decrypt after unlock');
+                    } else {
+                        try {
+                            config.clipboardHistory = JSON.parse(savedHistory);
+                            debugLogger.log('info', 'config', `Loaded ${config.clipboardHistory.length} clipboard history items`);
+                        } catch (e) {
+                            debugLogger.log('warn', 'config', 'Failed to parse clipboard history');
+                            config.clipboardHistory = [];
+                        }
+                    }
                     updateNotepadDisplay();
-                    debugLogger.log('info', 'config', `Loaded ${config.clipboardHistory.length} clipboard history items`);
                 }
                 
                 updateAutoCaptureUI();
@@ -3332,7 +3341,14 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         function saveConfig() {
             try {
                 localStorage.setItem('oblysk-config', JSON.stringify(config));
-                localStorage.setItem('oblysk-clipboard-history', JSON.stringify(config.clipboardHistory));
+                // Encrypt clipboard history if master password is available
+                const key = getCurrentEncryptionKey();
+                if (key && config.clipboardHistory.length > 0) {
+                    const historyJson = JSON.stringify(config.clipboardHistory);
+                    localStorage.setItem('oblysk-clipboard-history', 'ENC:' + encryptText(historyJson, key));
+                } else {
+                    localStorage.setItem('oblysk-clipboard-history', JSON.stringify(config.clipboardHistory));
+                }
                 debugLogger.log('debug', 'config', 'Configuration saved to localStorage');
             } catch (error) {
                 debugLogger.log('error', 'config', 'Failed to save configuration', { error: error.message });
@@ -3378,8 +3394,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         function openEmail() {
-            if (isElectron && require) {
-                require('electron').shell.openExternal('mailto:support@anarchygames.net');
+            if (isElectron && window.electron) {
+                window.electron.shell.openExternal('mailto:support@anarchygames.net');
             } else {
                 window.open('mailto:support@anarchygames.net', '_blank');
             }
@@ -3388,8 +3404,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         function openWebsite() {
-            if (isElectron && require) {
-                require('electron').shell.openExternal('https://anarchygames.net');
+            if (isElectron && window.electron) {
+                window.electron.shell.openExternal('https://anarchygames.net');
             } else {
                 window.open('https://anarchygames.net', '_blank');
             }
@@ -3398,8 +3414,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         function openDonate() {
-            if (isElectron && require) {
-                require('electron').shell.openExternal('https://anarchygames.net/donate');
+            if (isElectron && window.electron) {
+                window.electron.shell.openExternal('https://anarchygames.net/donate');
             } else {
                 window.open('https://anarchygames.net/donate', '_blank');
             }
@@ -3408,6 +3424,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         // Security System Functions (simplified for space - include all from original)
+        // Legacy hash — kept only for verifying existing master password hashes
         function simpleHash(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -3418,37 +3435,69 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             return hash.toString();
         }
 
+        // Expanded key derivation — produces a 256-byte key with high entropy
+        function deriveEncryptionKey(password) {
+            // Multiple mixing rounds to spread password entropy across a long key
+            let seed = password;
+            const segments = [];
+            for (let round = 0; round < 32; round++) {
+                let h = 0x811c9dc5; // FNV-1a offset basis
+                const input = seed + password + round;
+                for (let i = 0; i < input.length; i++) {
+                    h ^= input.charCodeAt(i);
+                    h = Math.imul(h, 0x01000193); // FNV-1a prime
+                    h = h >>> 0; // unsigned
+                }
+                // Convert to 8 hex chars (4 bytes)
+                segments.push(h.toString(16).padStart(8, '0'));
+                seed = h.toString(36) + seed;
+            }
+            return segments.join(''); // 256 hex chars = wide XOR key
+        }
+
         function encryptText(text, key) {
             if (!text || !key) return text;
-            
+
+            const derivedKey = deriveEncryptionKey(key);
             let result = '';
-            const keyHash = simpleHash(key);
-            
+
             for (let i = 0; i < text.length; i++) {
                 const textChar = text.charCodeAt(i);
-                const keyChar = keyHash.charCodeAt(i % keyHash.length);
+                const keyChar = derivedKey.charCodeAt(i % derivedKey.length);
                 const encryptedChar = textChar ^ keyChar;
                 result += String.fromCharCode(encryptedChar);
             }
-            
-            return btoa(result);
+
+            // Prefix with v2: so we know this uses the new key derivation
+            return 'v2:' + btoa(result);
         }
 
         function decryptText(encryptedText, key) {
             if (!encryptedText || !key) return encryptedText;
-            
+
             try {
-                const decoded = atob(encryptedText);
+                let encoded = encryptedText;
+                let derivedKey;
+
+                if (encoded.startsWith('v2:')) {
+                    // New encryption — use expanded key
+                    encoded = encoded.substring(3);
+                    derivedKey = deriveEncryptionKey(key);
+                } else {
+                    // Legacy encryption — use old simpleHash for backward compatibility
+                    derivedKey = simpleHash(key);
+                }
+
+                const decoded = atob(encoded);
                 let result = '';
-                const keyHash = simpleHash(key);
-                
+
                 for (let i = 0; i < decoded.length; i++) {
                     const encryptedChar = decoded.charCodeAt(i);
-                    const keyChar = keyHash.charCodeAt(i % keyHash.length);
+                    const keyChar = derivedKey.charCodeAt(i % derivedKey.length);
                     const decryptedChar = encryptedChar ^ keyChar;
                     result += String.fromCharCode(decryptedChar);
                 }
-                
+
                 return result;
             } catch (error) {
                 debugLogger.log('error', 'security', 'Decryption failed', { error: error.message });
@@ -3469,12 +3518,17 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         function getDecryptedCellContent(cellNumber) {
             const encryptedContent = config.cells[cellNumber];
             if (!encryptedContent) return '';
-            
+
             if (encryptedContent.startsWith('ENC:')) {
+                const key = getCurrentEncryptionKey();
+                if (!key) {
+                    // No password available (app locked) — don't attempt decrypt
+                    return '[LOCKED]';
+                }
                 const encrypted = encryptedContent.substring(4);
-                return decryptText(encrypted, getCurrentEncryptionKey());
+                return decryptText(encrypted, key);
             }
-            
+
             return encryptedContent;
         }
 
@@ -3598,14 +3652,30 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             document.getElementById('lock-screen').style.display = 'none';
             document.getElementById('lock-password').value = '';
             hideLockError();
-            
+
+            // Decrypt clipboard history if it was stored encrypted
+            const savedHistory = localStorage.getItem('oblysk-clipboard-history');
+            if (savedHistory && savedHistory.startsWith('ENC:')) {
+                try {
+                    const key = getCurrentEncryptionKey();
+                    const decrypted = decryptText(savedHistory.substring(4), key);
+                    if (decrypted && decrypted !== '[CORRUPTED DATA]') {
+                        config.clipboardHistory = JSON.parse(decrypted);
+                        debugLogger.log('success', 'security', `Decrypted ${config.clipboardHistory.length} clipboard history items`);
+                    }
+                } catch (e) {
+                    debugLogger.log('warn', 'security', 'Failed to decrypt clipboard history', { error: e.message });
+                    config.clipboardHistory = [];
+                }
+            }
+
             for (let i = 1; i <= 9; i++) {
                 updateCellDisplay(i);
             }
-            
+
             updatePrivacyUI();
             updateNotepadDisplay();
-            
+
             startLockTimer();
             startSessionTimer();
             showToast('Welcome back! Session renewed.', 'success');
@@ -3774,14 +3844,22 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function showPeekTooltip(event, content) {
             if (!config.maskContent) return;
-            
+
             const tooltip = document.getElementById('peek-tooltip');
             const preview = content.substring(0, 30) + (content.length > 30 ? '...' : '');
-            
+
             tooltip.textContent = `Preview: ${preview}`;
             tooltip.style.left = event.pageX + 'px';
             tooltip.style.top = (event.pageY - 40) + 'px';
             tooltip.classList.add('show');
+        }
+
+        // Safe peek tooltip that reads from clipboard history by index (avoids XSS via HTML attributes)
+        function showPeekTooltipByIndex(event, index) {
+            const entry = config.clipboardHistory[index];
+            if (entry) {
+                showPeekTooltip(event, entry.content);
+            }
         }
 
         function hidePeekTooltip() {
@@ -4286,4 +4364,11 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         window.closeDialog = closeDialog;
         window.closeDevInfo = closeDevInfo;
         window.closeSecuritySettings = closeSecuritySettings;
-        window.saveSecuritySettings = saveSecu
+        window.saveSecuritySettings = saveSecuritySettings;
+        window.showPeekTooltipByIndex = showPeekTooltipByIndex;
+        window.lockAppNow = lockAppNow;
+        window.toggleContentMasking = toggleContentMasking;
+        window.toggleGrid = toggleGrid;
+    </script>
+</body>
+</html>

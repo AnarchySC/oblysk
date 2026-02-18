@@ -69,8 +69,16 @@ function createTray() {
             }
         } catch (e) {
             logger.log('warn', 'tray', 'Using fallback tray icon', { error: e.message });
-            // Fallback: create a simple 16x16 icon
-            icon = nativeImage.createEmpty();
+            // Fallback: create a visible 16x16 icon (purple square matching brand color)
+            const size = 16;
+            const canvas = Buffer.alloc(size * size * 4);
+            for (let i = 0; i < size * size; i++) {
+                canvas[i * 4] = 91;      // R (brand purple)
+                canvas[i * 4 + 1] = 95;  // G
+                canvas[i * 4 + 2] = 199; // B
+                canvas[i * 4 + 3] = 255; // A
+            }
+            icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
         }
         
         // Resize for Windows system tray (16x16)
@@ -208,10 +216,9 @@ function createWindow() {
         alwaysOnTop: true,
         skipTaskbar: false,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            enableRemoteModule: true,
-            webSecurity: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
         },
         show: false,
         icon: path.join(__dirname, 'icon.ico')
@@ -536,8 +543,11 @@ async function simulateKeystrokesWindows(text, delay, requestId) {
                 }
                 escapedBatch += escapedChar;
             }
-            
-            const cmd = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escapedBatch}')"`;
+
+            // Escape single quotes for PowerShell string interpolation
+            const safeEscapedBatch = escapedBatch.replace(/'/g, "''");
+            const cmd = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${safeEscapedBatch}')"`;
+
             
             exec(cmd, { timeout: 5000 }, (error) => {
                 if (error) {
@@ -581,17 +591,28 @@ ipcMain.handle('paste-powershell', async (event, text) => {
     logger.log('info', 'paste', `[${requestId}] Windows PowerShell paste: ${text.length} chars`);
     
     try {
-        // Enhanced Windows character escaping for PowerShell
-        const escapedText = text
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '""')
-            .replace(/`/g, '``')
-            .replace(/\$/g, '`$')
-            .replace(/\[/g, '`[')
-            .replace(/\]/g, '`]')
-            .replace(/\r?\n/g, '{ENTER}');
-        
-        const command = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${escapedText}")`;
+        // Escape SendKeys special characters first, then PowerShell metacharacters
+        let escapedText = '';
+        for (const char of text) {
+            switch (char) {
+                case '{': escapedText += '{{'; break;
+                case '}': escapedText += '}}'; break;
+                case '+': escapedText += '{+}'; break;
+                case '^': escapedText += '{^}'; break;
+                case '%': escapedText += '{%}'; break;
+                case '~': escapedText += '{~}'; break;
+                case '(': escapedText += '{(}'; break;
+                case ')': escapedText += '{)}'; break;
+                case '[': escapedText += '{[}'; break;
+                case ']': escapedText += '{]}'; break;
+                case '\n': escapedText += '{ENTER}'; break;
+                case '\r': break; // skip CR, handled by \n
+                default: escapedText += char; break;
+            }
+        }
+        // Escape single quotes for safe PowerShell string interpolation
+        escapedText = escapedText.replace(/'/g, "''");
+        const command = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escapedText}')`;
         const result = await executeCommand('powershell', ['-Command', command], 10000, requestId);
         
         logger.log('success', 'paste', `[${requestId}] Windows PowerShell paste completed`);
@@ -718,9 +739,14 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-    logger.log('info', 'app', 'All windows closed, quitting Windows app');
-    isQuitting = true;
-    app.quit();
+    // If tray is active, keep running in background instead of quitting
+    if (tray && !isQuitting) {
+        logger.log('info', 'app', 'All windows closed, staying in system tray');
+    } else {
+        logger.log('info', 'app', 'All windows closed, quitting Windows app');
+        isQuitting = true;
+        app.quit();
+    }
 });
 
 app.on('before-quit', () => {
