@@ -2337,6 +2337,8 @@ ${'='.repeat(50)}`
         let clipboardTimer = null;
         let clipboardWarningTimer = null;
         let clipboardCountdownInterval = null;
+        let warningCountdownInterval = null;
+        let isPasting = false;
 
         // Startup Management
         function updateStartupProgress(step) {
@@ -3057,7 +3059,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             
             setStatus('working', 'Pasting on-deck...');
             showToast('Pasting on-deck item...', 'warning');
-            
+            isPasting = true;
+
             try {
                 if (!isElectron) {
                     await navigator.clipboard.writeText(content);
@@ -3066,7 +3069,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                     debugLogger.log('success', 'paste', 'On-deck item copied to clipboard (browser mode)');
                     return;
                 }
-                
+
                 let result;
                 switch (config.pasteMethod) {
                     case 'keystrokes':
@@ -3084,26 +3087,28 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                     default:
                         throw new Error(`Unknown paste method: ${config.pasteMethod}`);
                 }
-                
+
                 debugLogger.log('info', 'paste', 'On-deck paste completed', { result });
-                
+
                 if (result.success) {
                     showToast(result.message || 'On-deck item pasted successfully', 'success');
                     setStatus('success', 'On-deck paste successful');
                 } else {
                     throw new Error(result.error || 'On-deck paste failed');
                 }
-                
+
             } catch (error) {
                 debugLogger.log('error', 'paste', 'On-deck paste failed', { error: error.message });
                 setStatus('error', 'On-deck paste failed');
-                
+
                 try {
                     await navigator.clipboard.writeText(content);
                     showToast('On-deck paste failed - copied to clipboard instead', 'warning');
                 } catch (clipboardError) {
                     showToast(`On-deck paste and clipboard failed: ${error.message}`, 'error');
                 }
+            } finally {
+                isPasting = false;
             }
         }
 
@@ -3201,16 +3206,48 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function revealClipboardEntry(index) {
             if (!config.maskContent) return;
-            
+
             const entry = config.clipboardHistory[index];
             if (!entry) return;
-            
+
             const entryElement = document.getElementById(`clipboard-entry-${index}`);
             const contentElement = entryElement?.querySelector('.clipboard-content');
-            
+
             if (contentElement) {
                 revealContentTemporarily(contentElement, entry.content, `clipboard-${index}`);
             }
+        }
+
+        function revealImageContent(entryId) {
+            if (!config.maskContent) return;
+
+            const index = parseInt(entryId.replace('clipboard-entry-', ''));
+            const entry = config.clipboardHistory[index];
+            if (!entry || entry.type !== 'image') return;
+
+            const entryElement = document.getElementById(entryId);
+            const contentElement = entryElement?.querySelector('.clipboard-content');
+            if (!contentElement) return;
+
+            const timerId = `image-${entryId}`;
+            if (revealTimers.has(timerId)) {
+                clearTimeout(revealTimers.get(timerId));
+                revealTimers.delete(timerId);
+            }
+
+            contentElement.innerHTML = `<img src="${entry.content}" style="max-width: 100%; max-height: 200px; border-radius: 4px;">`;
+            contentElement.classList.add('revealed-content');
+
+            const timer = setTimeout(() => {
+                if (contentElement && contentElement.parentNode) {
+                    contentElement.innerHTML = `<div class="masked-content" onclick="revealImageContent('${entryId}')">📷 Image (Click to view)</div>`;
+                    contentElement.classList.remove('revealed-content');
+                }
+                revealTimers.delete(timerId);
+            }, config.peekDuration);
+
+            revealTimers.set(timerId, timer);
+            showToast(`Peeking for ${config.peekDuration/1000} seconds...`, 'warning');
         }
 
         // [Continue with all the other functions from the original code...]
@@ -3618,7 +3655,11 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         function lockApp() {
             config.isLocked = true;
             setCurrentMasterPassword(null);
-            
+
+            // Close any open dialogs before showing lock screen
+            closeSecuritySettings();
+            closeDevInfo();
+
             document.getElementById('lock-screen').style.display = 'flex';
             document.getElementById('lock-password').focus();
             clearTimers();
@@ -3980,21 +4021,48 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
                 const oldKey = getCurrentEncryptionKey();
                 const newKey = newPassword;
-                
+                let reEncrypted = 0;
+                let corrupted = 0;
+
                 for (let cellNumber in config.cells) {
                     const content = config.cells[cellNumber];
                     if (content && content.startsWith('ENC:')) {
                         const decrypted = decryptText(content.substring(4), oldKey);
                         if (decrypted !== '[CORRUPTED DATA]') {
                             config.cells[cellNumber] = 'ENC:' + encryptText(decrypted, newKey);
+                            reEncrypted++;
+                        } else {
+                            // Clear corrupted cells rather than orphaning them
+                            config.cells[cellNumber] = '';
+                            corrupted++;
+                            debugLogger.log('warn', 'security', `Cell ${cellNumber} was corrupted and cleared during password change`);
                         }
+                    }
+                }
+
+                // Also re-encrypt clipboard history if stored encrypted
+                const savedHistory = localStorage.getItem('oblysk-clipboard-history');
+                if (savedHistory && savedHistory.startsWith('ENC:')) {
+                    try {
+                        const decrypted = decryptText(savedHistory.substring(4), oldKey);
+                        if (decrypted && decrypted !== '[CORRUPTED DATA]') {
+                            const reEncryptedHistory = encryptText(decrypted, newKey);
+                            localStorage.setItem('oblysk-clipboard-history', 'ENC:' + reEncryptedHistory);
+                        }
+                    } catch (e) {
+                        debugLogger.log('warn', 'security', 'Failed to re-encrypt clipboard history during password change');
                     }
                 }
 
                 config.masterPasswordHash = simpleHash(newPassword);
                 setCurrentMasterPassword(newPassword);
-                showToast('Password changed successfully - data re-encrypted', 'success');
-                debugLogger.log('success', 'security', 'Master password changed and data re-encrypted');
+
+                if (corrupted > 0) {
+                    showToast(`Password changed. ${reEncrypted} cells re-encrypted, ${corrupted} corrupted cells cleared.`, 'warning');
+                } else {
+                    showToast('Password changed successfully - data re-encrypted', 'success');
+                }
+                debugLogger.log('success', 'security', 'Master password changed and data re-encrypted', { reEncrypted, corrupted });
             }
 
             saveConfig();
@@ -4061,6 +4129,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             clearTimeout(clipboardTimer);
             clearTimeout(clipboardWarningTimer);
             clearInterval(clipboardCountdownInterval);
+            clearInterval(warningCountdownInterval);
+            warningCountdownInterval = null;
         }
 
         function updateClipboardTimer() {
@@ -4107,13 +4177,14 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             warning.classList.add('show');
             
             const countdownElement = document.getElementById('warning-countdown');
-            const warningCountdown = setInterval(() => {
+            clearInterval(warningCountdownInterval);
+            warningCountdownInterval = setInterval(() => {
                 const now = Date.now();
                 const elapsed = now - config.clipboardCreatedTime;
                 const remaining = Math.max(0, config.clipboardMaxAge - elapsed);
-                
+
                 if (remaining === 0) {
-                    clearInterval(warningCountdown);
+                    clearInterval(warningCountdownInterval);
                     countdownElement.textContent = 'Clearing now...';
                     return;
                 }
@@ -4135,6 +4206,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         function dismissClipboardWarning() {
             const warning = document.getElementById('clipboard-warning');
             warning.classList.remove('show');
+            clearInterval(warningCountdownInterval);
+            warningCountdownInterval = null;
             debugLogger.log('info', 'clipboard', 'Clipboard warning dismissed');
         }
 
@@ -4152,6 +4225,12 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         function autoClearClipboard() {
+            if (isPasting) {
+                // Defer auto-clear until paste completes
+                setTimeout(autoClearClipboard, 2000);
+                debugLogger.log('info', 'clipboard', 'Auto-clear deferred - paste in progress');
+                return;
+            }
             clearClipboardHistory(true);
             dismissClipboardWarning();
             showToast('🧹 Clipboard automatically cleared for security', 'warning');
@@ -4341,6 +4420,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             }
         };
         window.revealClipboardEntry = revealClipboardEntry;
+        window.revealImageContent = revealImageContent;
         window.showPeekTooltip = showPeekTooltip;
         window.hidePeekTooltip = hidePeekTooltip;
         window.exportClipboard = exportClipboard;
@@ -4366,8 +4446,6 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         window.closeSecuritySettings = closeSecuritySettings;
         window.saveSecuritySettings = saveSecuritySettings;
         window.showPeekTooltipByIndex = showPeekTooltipByIndex;
-        window.lockAppNow = lockAppNow;
-        window.toggleContentMasking = toggleContentMasking;
         window.toggleGrid = toggleGrid;
     </script>
 </body>
