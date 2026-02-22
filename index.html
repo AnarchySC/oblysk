@@ -2,6 +2,8 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none';">
     <title>Oblysk - Console Paste Tool</title>
     <style>
         * {
@@ -2863,17 +2865,17 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             
             try {
                 const cellName = config.cellNames[cellNumber] || `Cell ${cellNumber}`;
-                const currentContent = getDecryptedCellContent(cellNumber) || '';
-                
+                const currentContent = await getDecryptedCellContent(cellNumber) || '';
+
                 const newContent = await showDialog(
                     `Content for "${cellName}"`,
                     'Enter password or content (will be encrypted)...',
                     currentContent
                 );
-                
+
                 if (newContent !== null) {
-                    setEncryptedCellContent(cellNumber, newContent);
-                    saveConfig();
+                    await setEncryptedCellContent(cellNumber, newContent);
+                    await saveConfig();
                     updateCellDisplay(cellNumber);
                     
                     if (newContent.trim()) {
@@ -2892,16 +2894,16 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
         }
 
         // Update cell display
-        function updateCellDisplay(cellNumber) {
+        async function updateCellDisplay(cellNumber) {
             const nameDisplay = document.querySelector(`[data-cell="${cellNumber}"].cell-name-display`);
             const cell = nameDisplay?.parentElement;
-            
+
             if (!nameDisplay || !cell) return;
-            
+
             const cellName = config.cellNames[cellNumber];
             const hasContent = config.cells[cellNumber] && config.cells[cellNumber].trim();
             const isEncrypted = hasContent && config.cells[cellNumber].startsWith('ENC:');
-            
+
             if (cellName && cellName.trim()) {
                 nameDisplay.textContent = cellName.trim();
                 nameDisplay.classList.remove('empty');
@@ -2909,17 +2911,17 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 nameDisplay.textContent = 'Click to name';
                 nameDisplay.classList.add('empty');
             }
-            
+
             if (hasContent) {
                 cell.classList.add('cell-has-content');
-                
+
                 if (isEncrypted) {
                     cell.classList.add('cell-encrypted');
                 } else {
                     cell.classList.remove('cell-encrypted');
                 }
-                
-                const content = getDecryptedCellContent(cellNumber);
+
+                const content = await getDecryptedCellContent(cellNumber);
                 if (content && content !== '[CORRUPTED DATA]') {
                     const preview = config.maskContent ? maskText(content, true) : content.substring(0, 50) + (content.length > 50 ? '...' : '');
                     cell.title = `Content: ${preview}${config.maskContent ? ' (Click to edit/view)' : ''}`;
@@ -2941,7 +2943,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             }
             
             const startTime = Date.now();
-            const content = getDecryptedCellContent(cellNumber);
+            const content = await getDecryptedCellContent(cellNumber);
             const cellName = config.cellNames[cellNumber];
             
             debugLogger.log('info', 'paste', `Starting paste for cell ${cellNumber}`, { hasContent: !!content, cellName, method: config.pasteMethod });
@@ -3114,11 +3116,17 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         // Enhanced clipboard history management
         function addToClipboardHistory(content, type = 'text', source = 'auto') {
+            // Reject image entries that aren't valid data: URIs
+            if (type === 'image' && !isValidImageDataUri(content)) {
+                debugLogger.log('warn', 'clipboard', 'Rejected non-data-URI image content');
+                return;
+            }
+
             const timestamp = new Date().toLocaleTimeString();
-            const entry = { 
-                content, 
-                type, 
-                timestamp, 
+            const entry = {
+                content,
+                type,
+                timestamp,
                 source,
                 id: Math.random().toString(36).substr(2, 9)
             };
@@ -3155,52 +3163,84 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             });
         }
 
+        function isValidImageDataUri(content) {
+            return typeof content === 'string' && /^data:image\/(png|jpeg|jpg|gif|webp|bmp|svg\+xml);base64,/i.test(content);
+        }
+
         function updateNotepadDisplay() {
             const notepad = document.getElementById('notepad');
             if (isManualEdit) return;
-            
+
             let html = '';
+            const imageEntries = []; // track entries that need DOM-safe image insertion
+
             for (let i = 0; i < config.clipboardHistory.length; i++) {
                 const entry = config.clipboardHistory[i];
                 const isOnDeck = i === 0;
                 const entryId = `clipboard-entry-${i}`;
-                
-                // Special styling for reverse copy entries
+
                 const isReverseCopy = entry.source && (entry.source.includes('selection') || entry.source === 'web-console');
                 const sourceIcon = isReverseCopy ? '🔄' : '📋';
-                
+
                 html += `<div class="clipboard-entry ${isOnDeck ? 'on-deck' : ''}" id="${entryId}">
                     <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
-                        ${sourceIcon} ${entry.timestamp}${isOnDeck ? ' • Press Ctrl+Alt+V to paste' : ''}
+                        ${escapeHtml(sourceIcon)} ${escapeHtml(entry.timestamp)}${isOnDeck ? ' • Press Ctrl+Alt+V to paste' : ''}
                         ${isReverseCopy ? ' • From web console' : ''}
                         ${config.maskContent ? ' • Click to peek' : ''}
                     </div>
                     <div class="clipboard-content" style="word-wrap: break-word; white-space: pre-wrap;">`;
-                
+
                 if (entry.type === 'image') {
                     if (config.maskContent) {
-                        html += `<div class="masked-content" onclick="revealImageContent('${entryId}')">📷 Image (Click to view)</div>`;
+                        html += `<div class="masked-content" data-image-reveal="${entryId}">📷 Image (Click to view)</div>`;
+                    } else if (isValidImageDataUri(entry.content)) {
+                        // Use a placeholder; we'll insert the img via DOM after innerHTML
+                        html += `<span data-image-placeholder="${i}"></span>`;
+                        imageEntries.push(i);
                     } else {
-                        html += `<img src="${entry.content}" style="max-width: 100%; max-height: 200px; border-radius: 4px;">`;
+                        html += escapeHtml('[Invalid image data]');
                     }
                 } else {
                     if (config.maskContent) {
                         const maskedText = maskText(entry.content);
                         html += `<span class="masked-content"
-                                    onclick="revealClipboardEntry(${i})"
+                                    data-peek-click="${i}"
                                     data-peek-index="${i}"
-                                    onmouseover="showPeekTooltipByIndex(event, ${i})"
-                                    onmouseout="hidePeekTooltip()"
-                                >${maskedText}</span>`;
+                                >${escapeHtml(maskedText)}</span>`;
                     } else {
                         html += escapeHtml(entry.content);
                     }
                 }
-                
+
                 html += `</div></div>`;
             }
-            
+
             notepad.innerHTML = html;
+
+            // DOM-safe image insertion (no innerHTML with user data)
+            for (const idx of imageEntries) {
+                const placeholder = notepad.querySelector(`[data-image-placeholder="${idx}"]`);
+                if (placeholder) {
+                    const img = document.createElement('img');
+                    img.src = config.clipboardHistory[idx].content;
+                    img.style.cssText = 'max-width:100%;max-height:200px;border-radius:4px;';
+                    placeholder.replaceWith(img);
+                }
+            }
+
+            // Attach click handlers via DOM (no inline onclick with user data)
+            notepad.querySelectorAll('[data-image-reveal]').forEach(el => {
+                const entryId = el.getAttribute('data-image-reveal');
+                el.addEventListener('click', () => revealImageContent(entryId));
+            });
+
+            notepad.querySelectorAll('[data-peek-click]').forEach(el => {
+                const idx = parseInt(el.getAttribute('data-peek-click'));
+                el.addEventListener('click', () => revealClipboardEntry(idx));
+                el.addEventListener('mouseover', (event) => showPeekTooltipByIndex(event, idx));
+                el.addEventListener('mouseout', () => hidePeekTooltip());
+            });
+
             document.getElementById('entry-count').textContent = config.clipboardHistory.length;
         }
 
@@ -3224,6 +3264,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             const index = parseInt(entryId.replace('clipboard-entry-', ''));
             const entry = config.clipboardHistory[index];
             if (!entry || entry.type !== 'image') return;
+            if (!isValidImageDataUri(entry.content)) return;
 
             const entryElement = document.getElementById(entryId);
             const contentElement = entryElement?.querySelector('.clipboard-content');
@@ -3235,12 +3276,22 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 revealTimers.delete(timerId);
             }
 
-            contentElement.innerHTML = `<img src="${entry.content}" style="max-width: 100%; max-height: 200px; border-radius: 4px;">`;
+            // DOM-safe image insertion
+            contentElement.textContent = '';
+            const img = document.createElement('img');
+            img.src = entry.content;
+            img.style.cssText = 'max-width:100%;max-height:200px;border-radius:4px;';
+            contentElement.appendChild(img);
             contentElement.classList.add('revealed-content');
 
             const timer = setTimeout(() => {
                 if (contentElement && contentElement.parentNode) {
-                    contentElement.innerHTML = `<div class="masked-content" onclick="revealImageContent('${entryId}')">📷 Image (Click to view)</div>`;
+                    contentElement.textContent = '';
+                    const maskedDiv = document.createElement('div');
+                    maskedDiv.className = 'masked-content';
+                    maskedDiv.textContent = '📷 Image (Click to view)';
+                    maskedDiv.addEventListener('click', () => revealImageContent(entryId));
+                    contentElement.appendChild(maskedDiv);
                     contentElement.classList.remove('revealed-content');
                 }
                 revealTimers.delete(timerId);
@@ -3375,14 +3426,25 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             }
         }
 
-        function saveConfig() {
+        // Sync save — only saves config object, not clipboard history encryption
+        function saveConfigSync() {
             try {
                 localStorage.setItem('oblysk-config', JSON.stringify(config));
-                // Encrypt clipboard history if master password is available
+                debugLogger.log('debug', 'config', 'Configuration saved (sync) to localStorage');
+            } catch (error) {
+                debugLogger.log('error', 'config', 'Failed to save configuration', { error: error.message });
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                localStorage.setItem('oblysk-config', JSON.stringify(config));
+                // Encrypt clipboard history if session key is available
                 const key = getCurrentEncryptionKey();
                 if (key && config.clipboardHistory.length > 0) {
                     const historyJson = JSON.stringify(config.clipboardHistory);
-                    localStorage.setItem('oblysk-clipboard-history', 'ENC:' + encryptText(historyJson, key));
+                    const encrypted = await encryptText(historyJson, key);
+                    localStorage.setItem('oblysk-clipboard-history', 'ENC:' + encrypted);
                 } else {
                     localStorage.setItem('oblysk-clipboard-history', JSON.stringify(config.clipboardHistory));
                 }
@@ -3460,9 +3522,10 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             debugLogger.log('info', 'external', 'Donate link opened');
         }
 
-        // Security System Functions (simplified for space - include all from original)
-        // Legacy hash — kept only for verifying existing master password hashes
-        function simpleHash(str) {
+        // ─── Security Crypto System (Web Crypto API) ─────────────────────────────
+
+        // Legacy hash — kept ONLY for migrating old password hashes to PBKDF2
+        function legacySimpleHash(str) {
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
                 const char = str.charCodeAt(i);
@@ -3472,112 +3535,204 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             return hash.toString();
         }
 
-        // Expanded key derivation — produces a 256-byte key with high entropy
-        function deriveEncryptionKey(password) {
-            // Multiple mixing rounds to spread password entropy across a long key
+        // Legacy XOR key derivation — kept ONLY for decrypting old v2: data during migration
+        function legacyDeriveEncryptionKey(password) {
             let seed = password;
             const segments = [];
             for (let round = 0; round < 32; round++) {
-                let h = 0x811c9dc5; // FNV-1a offset basis
+                let h = 0x811c9dc5;
                 const input = seed + password + round;
                 for (let i = 0; i < input.length; i++) {
                     h ^= input.charCodeAt(i);
-                    h = Math.imul(h, 0x01000193); // FNV-1a prime
-                    h = h >>> 0; // unsigned
+                    h = Math.imul(h, 0x01000193);
+                    h = h >>> 0;
                 }
-                // Convert to 8 hex chars (4 bytes)
                 segments.push(h.toString(16).padStart(8, '0'));
                 seed = h.toString(36) + seed;
             }
-            return segments.join(''); // 256 hex chars = wide XOR key
+            return segments.join('');
         }
 
-        function encryptText(text, key) {
-            if (!text || !key) return text;
-
-            const derivedKey = deriveEncryptionKey(key);
-            let result = '';
-
-            for (let i = 0; i < text.length; i++) {
-                const textChar = text.charCodeAt(i);
-                const keyChar = derivedKey.charCodeAt(i % derivedKey.length);
-                const encryptedChar = textChar ^ keyChar;
-                result += String.fromCharCode(encryptedChar);
-            }
-
-            // Prefix with v2: so we know this uses the new key derivation
-            return 'v2:' + btoa(result);
-        }
-
-        function decryptText(encryptedText, key) {
-            if (!encryptedText || !key) return encryptedText;
-
+        // Legacy XOR decrypt — kept ONLY for reading v2: and v1 data during migration
+        function legacyDecryptText(encryptedText, password) {
+            if (!encryptedText || !password) return encryptedText;
             try {
                 let encoded = encryptedText;
                 let derivedKey;
-
                 if (encoded.startsWith('v2:')) {
-                    // New encryption — use expanded key
                     encoded = encoded.substring(3);
-                    derivedKey = deriveEncryptionKey(key);
+                    derivedKey = legacyDeriveEncryptionKey(password);
                 } else {
-                    // Legacy encryption — use old simpleHash for backward compatibility
-                    derivedKey = simpleHash(key);
+                    derivedKey = legacySimpleHash(password);
                 }
-
                 const decoded = atob(encoded);
                 let result = '';
-
                 for (let i = 0; i < decoded.length; i++) {
                     const encryptedChar = decoded.charCodeAt(i);
                     const keyChar = derivedKey.charCodeAt(i % derivedKey.length);
-                    const decryptedChar = encryptedChar ^ keyChar;
-                    result += String.fromCharCode(decryptedChar);
+                    result += String.fromCharCode(encryptedChar ^ keyChar);
+                }
+                return result;
+            } catch (error) {
+                debugLogger.log('error', 'security', 'Legacy decryption failed', { error: error.message });
+                return '[CORRUPTED DATA]';
+            }
+        }
+
+        // ─── PBKDF2 Password Hashing ────────────────────────────────────────────
+        async function hashPasswordPBKDF2(password, salt = null) {
+            const enc = new TextEncoder();
+            if (!salt) {
+                salt = crypto.getRandomValues(new Uint8Array(16));
+            }
+            const iterations = 100000;
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+            );
+            const hashBits = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+                keyMaterial,
+                256
+            );
+            const saltB64 = btoa(String.fromCharCode(...salt));
+            const hashB64 = btoa(String.fromCharCode(...new Uint8Array(hashBits)));
+            return `pbkdf2:${iterations}:${saltB64}:${hashB64}`;
+        }
+
+        async function verifyPasswordPBKDF2(password, storedHash) {
+            if (!storedHash.startsWith('pbkdf2:')) return false;
+            const parts = storedHash.split(':');
+            if (parts.length !== 4) return false;
+            const iterations = parseInt(parts[1]);
+            const salt = Uint8Array.from(atob(parts[2]), c => c.charCodeAt(0));
+            const expectedHash = parts[3];
+
+            const enc = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']
+            );
+            const hashBits = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+                keyMaterial,
+                256
+            );
+            const computedHash = btoa(String.fromCharCode(...new Uint8Array(hashBits)));
+            return computedHash === expectedHash;
+        }
+
+        // ─── AES-256-GCM Encryption ─────────────────────────────────────────────
+        // Derives a CryptoKey from password + salt using PBKDF2
+        async function deriveSessionKey(password, salt) {
+            const enc = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
+            );
+            return crypto.subtle.deriveKey(
+                { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        // Encrypts text using AES-256-GCM with the session CryptoKey
+        // Returns: v3:<salt_b64>:<iv_b64>:<ciphertext_b64>
+        async function encryptText(text, cryptoKey) {
+            if (!text || !cryptoKey) return text;
+
+            const enc = new TextEncoder();
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv },
+                cryptoKey,
+                enc.encode(text)
+            );
+            const ivB64 = btoa(String.fromCharCode(...iv));
+            const ctB64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
+            return `v3:${ivB64}:${ctB64}`;
+        }
+
+        // Decrypts text — handles v3: (AES-GCM) format
+        // For legacy v2:/v1 formats, use legacyDecryptText() for migration
+        async function decryptText(encryptedText, cryptoKey) {
+            if (!encryptedText || !cryptoKey) return encryptedText;
+
+            try {
+                if (encryptedText.startsWith('v3:')) {
+                    const parts = encryptedText.substring(3).split(':');
+                    if (parts.length !== 2) return '[CORRUPTED DATA]';
+                    const iv = Uint8Array.from(atob(parts[0]), c => c.charCodeAt(0));
+                    const ciphertext = Uint8Array.from(atob(parts[1]), c => c.charCodeAt(0));
+                    const plainBuf = await crypto.subtle.decrypt(
+                        { name: 'AES-GCM', iv },
+                        cryptoKey,
+                        ciphertext
+                    );
+                    return new TextDecoder().decode(plainBuf);
                 }
 
-                return result;
+                // v2: or v1 data should have been migrated already
+                debugLogger.log('warn', 'security', 'Encountered legacy encrypted data that was not migrated');
+                return '[LEGACY DATA - NEEDS MIGRATION]';
             } catch (error) {
                 debugLogger.log('error', 'security', 'Decryption failed', { error: error.message });
                 return '[CORRUPTED DATA]';
             }
         }
 
-        let currentMasterPassword = null;
+        // ─── Session Key Management ──────────────────────────────────────────────
+        // Stores a CryptoKey, never the plaintext password
+        let currentSessionKey = null;
+        let encryptionKeySalt = null; // stored in config, reused across sessions
 
-        function setCurrentMasterPassword(password) {
-            currentMasterPassword = password;
+        function setCurrentSessionKey(key) {
+            currentSessionKey = key;
         }
 
         function getCurrentEncryptionKey() {
-            return currentMasterPassword || '';
+            return currentSessionKey;
         }
 
-        function getDecryptedCellContent(cellNumber) {
+        // Derive and store session key from password
+        async function initSessionKey(password) {
+            // Ensure we have a persistent salt for encryption key derivation
+            if (!config.encryptionKeySalt) {
+                const salt = crypto.getRandomValues(new Uint8Array(16));
+                config.encryptionKeySalt = btoa(String.fromCharCode(...salt));
+                saveConfigSync(); // save salt immediately
+            }
+            encryptionKeySalt = Uint8Array.from(atob(config.encryptionKeySalt), c => c.charCodeAt(0));
+            const key = await deriveSessionKey(password, encryptionKeySalt);
+            setCurrentSessionKey(key);
+            return key;
+        }
+
+        async function getDecryptedCellContent(cellNumber) {
             const encryptedContent = config.cells[cellNumber];
             if (!encryptedContent) return '';
 
             if (encryptedContent.startsWith('ENC:')) {
                 const key = getCurrentEncryptionKey();
                 if (!key) {
-                    // No password available (app locked) — don't attempt decrypt
                     return '[LOCKED]';
                 }
                 const encrypted = encryptedContent.substring(4);
-                return decryptText(encrypted, key);
+                return await decryptText(encrypted, key);
             }
 
             return encryptedContent;
         }
 
-        function setEncryptedCellContent(cellNumber, content) {
+        async function setEncryptedCellContent(cellNumber, content) {
             if (!content) {
                 config.cells[cellNumber] = '';
                 return;
             }
-            
+
             const key = getCurrentEncryptionKey();
             if (key) {
-                config.cells[cellNumber] = 'ENC:' + encryptText(content, key);
+                config.cells[cellNumber] = 'ENC:' + await encryptText(content, key);
                 debugLogger.log('info', 'security', `Cell ${cellNumber} content encrypted`);
             } else {
                 config.cells[cellNumber] = content;
@@ -3596,12 +3751,12 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
             const password = await showDialog(
                 '🔐 Security Setup',
-                'Create a master password to secure your data...',
+                'Create a master password to secure your data (8+ characters)...',
                 ''
             );
 
-            if (!password || password.length < 4) {
-                showToast('Password must be at least 4 characters', 'error');
+            if (!password || password.length < 8) {
+                showToast('Password must be at least 8 characters', 'error');
                 setTimeout(setupMasterPassword, 1000);
                 return;
             }
@@ -3618,35 +3773,36 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 return;
             }
 
-            config.masterPasswordHash = simpleHash(password);
+            config.masterPasswordHash = await hashPasswordPBKDF2(password);
             config.sessionStartTime = Date.now();
-            
-            setCurrentMasterPassword(password);
-            migrateDataToEncrypted();
-            
-            saveConfig();
+
+            await initSessionKey(password);
+            await migrateDataToEncrypted();
+
+            await saveConfig();
             startLockTimer();
             startSessionTimer();
             showToast('Security enabled! Data is now encrypted.', 'success');
             debugLogger.log('success', 'security', 'Master password setup completed');
         }
 
-        function migrateDataToEncrypted() {
+        async function migrateDataToEncrypted() {
             const key = getCurrentEncryptionKey();
             if (!key) return;
-            
+
             let migrated = false;
-            
+
             for (let cellNumber in config.cells) {
                 const content = config.cells[cellNumber];
                 if (content && !content.startsWith('ENC:')) {
-                    config.cells[cellNumber] = 'ENC:' + encryptText(content, key);
+                    // Plaintext cell — encrypt it
+                    config.cells[cellNumber] = 'ENC:' + await encryptText(content, key);
                     migrated = true;
                 }
             }
-            
+
             if (migrated) {
-                saveConfig();
+                await saveConfig();
                 showToast('Data migrated to encrypted storage', 'success');
                 debugLogger.log('success', 'security', 'Data migration to encrypted storage completed');
             }
@@ -3654,7 +3810,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function lockApp() {
             config.isLocked = true;
-            setCurrentMasterPassword(null);
+            setCurrentSessionKey(null);
 
             // Close any open dialogs before showing lock screen
             closeSecuritySettings();
@@ -3672,13 +3828,35 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             lockApp();
         }
 
-        function attemptUnlock() {
+        async function attemptUnlock() {
             const password = document.getElementById('lock-password').value;
-            const hashedInput = simpleHash(password);
 
-            if (hashedInput === config.masterPasswordHash) {
-                setCurrentMasterPassword(password);
-                unlockApp();
+            let verified = false;
+            let needsHashMigration = false;
+
+            if (config.masterPasswordHash.startsWith('pbkdf2:')) {
+                // Modern PBKDF2 hash
+                verified = await verifyPasswordPBKDF2(password, config.masterPasswordHash);
+            } else {
+                // Legacy simpleHash — verify and schedule migration
+                const legacyHash = legacySimpleHash(password);
+                verified = (legacyHash === config.masterPasswordHash);
+                if (verified) needsHashMigration = true;
+            }
+
+            if (verified) {
+                await initSessionKey(password);
+
+                // Migrate legacy password hash to PBKDF2
+                if (needsHashMigration) {
+                    config.masterPasswordHash = await hashPasswordPBKDF2(password);
+                    debugLogger.log('success', 'security', 'Migrated password hash from legacy to PBKDF2');
+                }
+
+                // Migrate any legacy v2:/v1 encrypted cell data to v3: (AES-GCM)
+                await migrateLegacyEncryptedData(password);
+
+                await unlockApp();
             } else {
                 showLockError('Incorrect password. Please try again.');
                 document.getElementById('lock-password').value = '';
@@ -3687,7 +3865,54 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             }
         }
 
-        function unlockApp() {
+        // Migrate v2:/v1 XOR-encrypted data to v3: AES-GCM
+        async function migrateLegacyEncryptedData(password) {
+            const key = getCurrentEncryptionKey();
+            if (!key) return;
+
+            let migrated = false;
+
+            // Migrate cells
+            for (let cellNumber in config.cells) {
+                const content = config.cells[cellNumber];
+                if (content && content.startsWith('ENC:')) {
+                    const encrypted = content.substring(4);
+                    if (!encrypted.startsWith('v3:')) {
+                        // Legacy format — decrypt with old method, re-encrypt with AES-GCM
+                        const plaintext = legacyDecryptText(encrypted, password);
+                        if (plaintext && plaintext !== '[CORRUPTED DATA]') {
+                            config.cells[cellNumber] = 'ENC:' + await encryptText(plaintext, key);
+                            migrated = true;
+                        }
+                    }
+                }
+            }
+
+            // Migrate clipboard history
+            const savedHistory = localStorage.getItem('oblysk-clipboard-history');
+            if (savedHistory && savedHistory.startsWith('ENC:')) {
+                const encrypted = savedHistory.substring(4);
+                if (!encrypted.startsWith('v3:')) {
+                    try {
+                        const plaintext = legacyDecryptText(encrypted, password);
+                        if (plaintext && plaintext !== '[CORRUPTED DATA]') {
+                            const reEncrypted = await encryptText(plaintext, key);
+                            localStorage.setItem('oblysk-clipboard-history', 'ENC:' + reEncrypted);
+                            migrated = true;
+                        }
+                    } catch (e) {
+                        debugLogger.log('warn', 'security', 'Failed to migrate legacy clipboard history');
+                    }
+                }
+            }
+
+            if (migrated) {
+                await saveConfig();
+                debugLogger.log('success', 'security', 'Migrated legacy encrypted data to AES-GCM (v3)');
+            }
+        }
+
+        async function unlockApp() {
             config.isLocked = false;
             config.sessionStartTime = Date.now();
             document.getElementById('lock-screen').style.display = 'none';
@@ -3699,7 +3924,7 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             if (savedHistory && savedHistory.startsWith('ENC:')) {
                 try {
                     const key = getCurrentEncryptionKey();
-                    const decrypted = decryptText(savedHistory.substring(4), key);
+                    const decrypted = await decryptText(savedHistory.substring(4), key);
                     if (decrypted && decrypted !== '[CORRUPTED DATA]') {
                         config.clipboardHistory = JSON.parse(decrypted);
                         debugLogger.log('success', 'security', `Decrypted ${config.clipboardHistory.length} clipboard history items`);
@@ -3988,12 +4213,12 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             }
         }
 
-        function saveSecuritySettings() {
+        async function saveSecuritySettings() {
             const currentPassword = document.getElementById('current-password').value;
             const newPassword = document.getElementById('new-password').value;
             const confirmPassword = document.getElementById('confirm-password').value;
             const newTimeout = parseInt(document.getElementById('lock-timeout-range').value);
-            
+
             const maskContent = document.getElementById('mask-content-checkbox').checked;
             const maskClipboard = document.getElementById('mask-clipboard-checkbox').checked;
             const peekDuration = parseInt(document.getElementById('peek-duration-range').value);
@@ -4004,7 +4229,15 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
             config.peekDuration = peekDuration;
 
             if (currentPassword && newPassword) {
-                if (simpleHash(currentPassword) !== config.masterPasswordHash) {
+                // Verify current password
+                let currentVerified = false;
+                if (config.masterPasswordHash.startsWith('pbkdf2:')) {
+                    currentVerified = await verifyPasswordPBKDF2(currentPassword, config.masterPasswordHash);
+                } else {
+                    currentVerified = (legacySimpleHash(currentPassword) === config.masterPasswordHash);
+                }
+
+                if (!currentVerified) {
                     showToast('Current password is incorrect', 'error');
                     return;
                 }
@@ -4014,25 +4247,30 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                     return;
                 }
 
-                if (newPassword.length < 4) {
-                    showToast('New password must be at least 4 characters', 'error');
+                if (newPassword.length < 8) {
+                    showToast('New password must be at least 8 characters', 'error');
                     return;
                 }
 
+                // Decrypt all cells with old key, re-encrypt with new key
                 const oldKey = getCurrentEncryptionKey();
-                const newKey = newPassword;
+
+                // Generate new encryption salt for new password
+                const newSalt = crypto.getRandomValues(new Uint8Array(16));
+                config.encryptionKeySalt = btoa(String.fromCharCode(...newSalt));
+                const newKey = await deriveSessionKey(newPassword, newSalt);
+
                 let reEncrypted = 0;
                 let corrupted = 0;
 
                 for (let cellNumber in config.cells) {
                     const content = config.cells[cellNumber];
                     if (content && content.startsWith('ENC:')) {
-                        const decrypted = decryptText(content.substring(4), oldKey);
+                        const decrypted = await decryptText(content.substring(4), oldKey);
                         if (decrypted !== '[CORRUPTED DATA]') {
-                            config.cells[cellNumber] = 'ENC:' + encryptText(decrypted, newKey);
+                            config.cells[cellNumber] = 'ENC:' + await encryptText(decrypted, newKey);
                             reEncrypted++;
                         } else {
-                            // Clear corrupted cells rather than orphaning them
                             config.cells[cellNumber] = '';
                             corrupted++;
                             debugLogger.log('warn', 'security', `Cell ${cellNumber} was corrupted and cleared during password change`);
@@ -4040,13 +4278,13 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                     }
                 }
 
-                // Also re-encrypt clipboard history if stored encrypted
+                // Re-encrypt clipboard history
                 const savedHistory = localStorage.getItem('oblysk-clipboard-history');
                 if (savedHistory && savedHistory.startsWith('ENC:')) {
                     try {
-                        const decrypted = decryptText(savedHistory.substring(4), oldKey);
+                        const decrypted = await decryptText(savedHistory.substring(4), oldKey);
                         if (decrypted && decrypted !== '[CORRUPTED DATA]') {
-                            const reEncryptedHistory = encryptText(decrypted, newKey);
+                            const reEncryptedHistory = await encryptText(decrypted, newKey);
                             localStorage.setItem('oblysk-clipboard-history', 'ENC:' + reEncryptedHistory);
                         }
                     } catch (e) {
@@ -4054,8 +4292,8 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                     }
                 }
 
-                config.masterPasswordHash = simpleHash(newPassword);
-                setCurrentMasterPassword(newPassword);
+                config.masterPasswordHash = await hashPasswordPBKDF2(newPassword);
+                setCurrentSessionKey(newKey);
 
                 if (corrupted > 0) {
                     showToast(`Password changed. ${reEncrypted} cells re-encrypted, ${corrupted} corrupted cells cleared.`, 'warning');
@@ -4065,15 +4303,15 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 debugLogger.log('success', 'security', 'Master password changed and data re-encrypted', { reEncrypted, corrupted });
             }
 
-            saveConfig();
+            await saveConfig();
             startLockTimer();
-            
+
             updatePrivacyUI();
             updateNotepadDisplay();
             for (let i = 1; i <= 9; i++) {
                 updateCellDisplay(i);
             }
-            
+
             closeSecuritySettings();
             showToast('Security & privacy settings saved', 'success');
             debugLogger.log('success', 'settings', 'Security settings saved');

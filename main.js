@@ -1,6 +1,6 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu, shell } = require('electron');
 const path = require('path');
-const { spawn, exec, execSync } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const os = require('os');
 
 let mainWindow = null;
@@ -269,6 +269,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             preload: path.join(__dirname, 'preload.js')
         },
         show: false,
@@ -493,7 +494,7 @@ function executeCommand(command, args, timeoutMs = 5000, requestId = 'unknown') 
     return new Promise((resolve) => {
         logger.log('info', 'command', `[${requestId}] Executing: ${command} ${args.join(' ').substring(0, 100)}`);
 
-        const proc = spawn(command, args, { shell: true });
+        const proc = spawn(command, args, { shell: false });
 
         let output = '';
         let error = '';
@@ -590,14 +591,25 @@ async function simulateKeystrokesWindows(text, delay, requestId) {
             }
 
             const safeEscapedBatch = escapedBatch.replace(/'/g, "''");
-            const cmd = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${safeEscapedBatch}')"`;
+            const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${safeEscapedBatch}')`;
+            const proc = spawn('powershell', ['-Command', script], { shell: false });
 
-            exec(cmd, { timeout: 5000 }, (error) => {
-                if (error) {
-                    logger.log('warn', 'paste', `[${requestId}] Batch error at position ${index}`, { error: error.message });
-                    errors.push(`Position ${index}: ${error.message}`);
+            let procError = '';
+            proc.stderr.on('data', (data) => { procError += data.toString(); });
+
+            proc.on('close', (code) => {
+                if (code !== 0) {
+                    logger.log('warn', 'paste', `[${requestId}] Batch error at position ${index}`, { error: procError });
+                    errors.push(`Position ${index}: ${procError || 'exit code ' + code}`);
                 }
 
+                index += batchSize;
+                setTimeout(processNextBatch, delay * Math.min(batchSize, 5));
+            });
+
+            proc.on('error', (err) => {
+                logger.log('warn', 'paste', `[${requestId}] Batch spawn error at position ${index}`, { error: err.message });
+                errors.push(`Position ${index}: ${err.message}`);
                 index += batchSize;
                 setTimeout(processNextBatch, delay * Math.min(batchSize, 5));
             });
@@ -855,6 +867,16 @@ ipcMain.handle('get-main-process-logs', () => {
 
 ipcMain.on('renderer-log', (event, logData) => {
     logger.log(logData.level, 'renderer', logData.message, logData.data);
+});
+
+ipcMain.handle('open-external', async (event, url) => {
+    // Only allow http(s) and mailto URLs
+    if (/^(https?:|mailto:)/i.test(url)) {
+        await shell.openExternal(url);
+        return { success: true };
+    }
+    logger.log('warn', 'security', 'Blocked open-external with disallowed URL scheme', { url });
+    return { success: false, error: 'URL scheme not allowed' };
 });
 
 // ─── App Lifecycle ──────────────────────────────────────────────────────────

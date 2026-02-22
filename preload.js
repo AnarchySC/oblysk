@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Whitelist of allowed IPC channels
 const INVOKE_CHANNELS = [
@@ -7,7 +7,8 @@ const INVOKE_CHANNELS = [
     'paste-powershell',
     'test-hotkeys',
     'get-clipboard-content',
-    'get-main-process-logs'
+    'get-main-process-logs',
+    'open-external'
 ];
 
 const SEND_CHANNELS = [
@@ -53,11 +54,7 @@ contextBridge.exposeInMainWorld('electron', {
     },
     shell: {
         openExternal: (url) => {
-            // Only allow http(s) and mailto URLs
-            if (/^(https?:|mailto:)/i.test(url)) {
-                return shell.openExternal(url);
-            }
-            throw new Error(`URL scheme not allowed: ${url}`);
+            return ipcRenderer.invoke('open-external', url);
         }
     }
 });
