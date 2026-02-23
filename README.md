@@ -94,7 +94,7 @@ npm run build-all     # All platforms
 
 ### Initial Setup
 1. **Launch Oblysk** - you'll see the 3x3 grid interface
-2. **Set master password** - secure your data (minimum 4 characters)
+2. **Set master password** - secure your data (minimum 8 characters)
 3. **Configure hotkeys** - all 22 hotkeys are registered automatically
 
 ### Basic Workflow
@@ -137,13 +137,16 @@ Automatic locking based on user inactivity (configurable timeout).
 ## Security Features
 
 ### Data Encryption
-- All stored data is encrypted using your master password
-- Encryption occurs locally - no data transmitted externally
+- **AES-256-GCM** encryption for all stored data (cells and clipboard history)
+- **PBKDF2** password hashing with 100,000 iterations and per-password salts
+- Encryption key derived via Web Crypto API — plaintext password never stored in memory
+- Content Security Policy (CSP) blocks external scripts and connections
+- Encryption occurs locally — no data transmitted externally
 
 ### Session Security
 - **Auto-lock** after configurable inactivity period
 - **Manual lock/unlock** for immediate security
-- **Password verification** required for access
+- **PBKDF2 password verification** required for access
 
 ### Privacy Protection
 - **No telemetry** or data collection

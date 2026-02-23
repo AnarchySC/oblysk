@@ -15,6 +15,7 @@ const PLATFORM_NAME = PLATFORM === 'win32' ? 'Windows' : PLATFORM === 'darwin' ?
 const IS_WINDOWS = PLATFORM === 'win32';
 const IS_LINUX = PLATFORM === 'linux';
 const IS_MAC = PLATFORM === 'darwin';
+const IS_PRODUCTION = app.isPackaged;
 
 // Detect Linux display server (X11 or Wayland)
 let linuxDisplayServer = 'x11'; // default
@@ -58,13 +59,16 @@ class MainProcessLogger {
             this.logs.pop();
         }
 
-        const prefix = `[${level.toUpperCase()}] [${category}]`;
-        if (level === 'error') {
-            console.error(prefix, message, data || '');
-        } else if (level === 'warn') {
-            console.warn(prefix, message, data || '');
-        } else {
-            console.log(prefix, message, data || '');
+        // Only log to console in development
+        if (!IS_PRODUCTION) {
+            const prefix = `[${level.toUpperCase()}] [${category}]`;
+            if (level === 'error') {
+                console.error(prefix, message, data || '');
+            } else if (level === 'warn') {
+                console.warn(prefix, message, data || '');
+            } else {
+                console.log(prefix, message, data || '');
+            }
         }
 
         if (mainWindow && mainWindow.webContents) {
@@ -159,15 +163,17 @@ function createTray() {
                     }
                 }
             },
-            { type: 'separator' },
-            {
-                label: 'Debug Info',
-                click: () => showDebugInfo()
-            },
-            {
-                label: 'Export Logs',
-                click: () => exportMainProcessLogs()
-            },
+            ...(IS_PRODUCTION ? [] : [
+                { type: 'separator' },
+                {
+                    label: 'Debug Info',
+                    click: () => showDebugInfo()
+                },
+                {
+                    label: 'Export Logs',
+                    click: () => exportMainProcessLogs()
+                }
+            ]),
             { type: 'separator' },
             {
                 label: 'Quit Oblysk',
@@ -270,6 +276,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
+            devTools: !IS_PRODUCTION,
             preload: path.join(__dirname, 'preload.js')
         },
         show: false,
@@ -915,9 +922,12 @@ app.on('before-quit', () => {
 
 // Security: Prevent new window creation
 app.on('web-contents-created', (event, contents) => {
-    contents.on('new-window', (event, navigationUrl) => {
-        event.preventDefault();
-        logger.log('warn', 'security', 'Prevented new window creation', { url: navigationUrl });
+    contents.setWindowOpenHandler(({ url }) => {
+        if (/^(https?:|mailto:)/i.test(url)) {
+            shell.openExternal(url);
+        }
+        logger.log('warn', 'security', 'Prevented new window creation', { url });
+        return { action: 'deny' };
     });
 });
 
