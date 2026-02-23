@@ -54,7 +54,6 @@
       "icon": "icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-Windows-${arch}.${ext}",
-      "publisherName": "Anarchy Games",
       "verifyUpdateCodeSignature": false
     },
     "linux": {
