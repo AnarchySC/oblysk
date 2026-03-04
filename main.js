@@ -1,9 +1,11 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, nativeImage, Tray, Menu, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn, execSync } = require('child_process');
 const os = require('os');
 
 let mainWindow = null;
+let togglePollInterval = null; // polls for Wayland toggle file
 let tray = null;
 let isQuitting = false;
 let clipboardMonitorInterval = null;
@@ -71,7 +73,7 @@ class MainProcessLogger {
             }
         }
 
-        if (mainWindow && mainWindow.webContents) {
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
             mainWindow.webContents.send('main-process-log', entry);
         }
     }
@@ -196,6 +198,81 @@ function createTray() {
     }
 }
 
+const TOGGLE_FILE = path.join(os.tmpdir(), 'oblysk-toggle');
+const TOGGLE_SCRIPT = path.join(os.tmpdir(), 'oblysk-toggle.sh');
+const KEYBINDING_PATH = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/oblysk-toggle/';
+
+function setupWaylandToggle() {
+    // Write the toggle script
+    fs.writeFileSync(TOGGLE_SCRIPT, `#!/bin/bash\ntouch "${TOGGLE_FILE}"\n`, { mode: 0o755 });
+    // Clean any stale toggle file
+    try { fs.unlinkSync(TOGGLE_FILE); } catch(e) {}
+
+    // Register GNOME custom keybinding
+    try {
+        const current = execSync('gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings').toString().trim();
+        if (!current.includes('oblysk-toggle')) {
+            let newList;
+            if (current === '@as []') {
+                newList = `['${KEYBINDING_PATH}']`;
+            } else {
+                newList = current.replace(/]$/, `, '${KEYBINDING_PATH}']`);
+            }
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "${newList}"`);
+        }
+        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} name "Oblysk Toggle"`);
+        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} command "${TOGGLE_SCRIPT}"`);
+        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} binding "<Ctrl><Alt>o"`);
+        logger.log('success', 'hotkeys', 'Wayland toggle keybinding registered (Ctrl+Alt+O)');
+    } catch (err) {
+        logger.log('error', 'hotkeys', 'Failed to register GNOME keybinding', { error: err.message });
+    }
+
+    // Poll for the toggle file
+    togglePollInterval = setInterval(() => {
+        try {
+            fs.accessSync(TOGGLE_FILE);
+            // Toggle file exists — consume it and toggle
+            fs.unlinkSync(TOGGLE_FILE);
+            toggleWindow();
+        } catch(e) {
+            // File doesn't exist, nothing to do
+        }
+    }, 150);
+    logger.log('info', 'hotkeys', 'Wayland toggle file polling started');
+}
+
+function toggleWindow() {
+    if (!mainWindow) return;
+    if (mainWindow.isVisible()) {
+        mainWindow.hide();
+    } else {
+        showMainWindow();
+    }
+    logger.log('info', 'hotkey', 'Toggle window visibility (Wayland)');
+}
+
+function cleanupWaylandToggle() {
+    if (togglePollInterval) {
+        clearInterval(togglePollInterval);
+        togglePollInterval = null;
+    }
+    try { fs.unlinkSync(TOGGLE_FILE); } catch(e) {}
+    try { fs.unlinkSync(TOGGLE_SCRIPT); } catch(e) {}
+    // Remove GNOME keybinding
+    try {
+        const current = execSync('gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings').toString().trim();
+        if (current.includes('oblysk-toggle')) {
+            const newList = current
+                .replace(new RegExp(",?\\s*'" + KEYBINDING_PATH.replace(/\//g, '\\/') + "'"), '')
+                .replace("[ ,", "[")
+                .replace(", ]", "]");
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "${newList}"`);
+        }
+    } catch(e) {}
+    logger.log('info', 'hotkeys', 'Wayland toggle cleaned up');
+}
+
 function showMainWindow() {
     if (mainWindow) {
         if (mainWindow.isMinimized()) {
@@ -203,7 +280,7 @@ function showMainWindow() {
         }
         mainWindow.show();
         mainWindow.focus();
-        logger.log('info', 'window', 'Main window shown via tray');
+        logger.log('info', 'window', 'Main window shown');
     }
 }
 
@@ -373,21 +450,10 @@ function setupHotkeys() {
         }
     }
 
+    // Ctrl+Alt+O toggle is handled by the X11 hotkey listener (SIGUSR1), not globalShortcut.
+    // This avoids the Electron/Linux bug where globalShortcut stops firing after hide().
+
     const additionalHotkeys = [
-        {
-            key: 'CommandOrControl+Alt+O',
-            name: 'Toggle Window',
-            handler: () => {
-                logger.log('info', 'hotkey', 'Toggle window visibility');
-                if (mainWindow) {
-                    if (mainWindow.isVisible()) {
-                        mainWindow.hide();
-                    } else {
-                        showMainWindow();
-                    }
-                }
-            }
-        },
         {
             key: 'CommandOrControl+Alt+C',
             name: 'Copy to Notepad',
@@ -894,6 +960,12 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
 
+    // On Wayland, Electron's globalShortcut breaks when windows are hidden.
+    // Use GNOME custom keybinding + file-based IPC instead.
+    if (IS_LINUX && linuxDisplayServer === 'wayland') {
+        setupWaylandToggle();
+    }
+
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -917,6 +989,7 @@ app.on('before-quit', () => {
     logger.log('info', 'app', 'App quitting, cleaning up');
     isQuitting = true;
     globalShortcut.unregisterAll();
+    cleanupWaylandToggle();
     stopClipboardMonitoring();
 });
 
