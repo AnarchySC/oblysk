@@ -5,7 +5,7 @@ const { spawn, execSync } = require('child_process');
 const os = require('os');
 
 let mainWindow = null;
-let togglePollInterval = null; // polls for Wayland toggle file
+let waylandPollInterval = null; // polls for Wayland action file
 let tray = null;
 let isQuitting = false;
 let clipboardMonitorInterval = null;
@@ -19,15 +19,26 @@ const IS_LINUX = PLATFORM === 'linux';
 const IS_MAC = PLATFORM === 'darwin';
 const IS_PRODUCTION = app.isPackaged;
 
-// Detect Linux display server (X11 or Wayland)
+// Detect Linux display server (X11 or Wayland) and desktop environment
 let linuxDisplayServer = 'x11'; // default
+let linuxDesktop = ''; // 'gnome', 'kde', 'sway', etc.
 if (IS_LINUX) {
     const sessionType = process.env.XDG_SESSION_TYPE || '';
     const waylandDisplay = process.env.WAYLAND_DISPLAY || '';
     if (sessionType === 'wayland' || waylandDisplay) {
         linuxDisplayServer = 'wayland';
     }
+    const desktop = (process.env.XDG_CURRENT_DESKTOP || '').toLowerCase();
+    if (desktop.includes('gnome') || desktop.includes('unity')) {
+        linuxDesktop = 'gnome';
+    } else if (desktop.includes('kde')) {
+        linuxDesktop = 'kde';
+    } else if (desktop.includes('sway') || desktop.includes('hyprland')) {
+        linuxDesktop = 'wlroots';
+    }
 }
+// wtype only works on wlroots compositors (Sway, Hyprland), not GNOME/KDE
+const canUseWtype = linuxDisplayServer === 'wayland' && linuxDesktop === 'wlroots';
 
 // Check if a command-line tool is available
 function hasCommand(cmd) {
@@ -129,9 +140,9 @@ function createTray() {
             const size = 16;
             const canvas = Buffer.alloc(size * size * 4);
             for (let i = 0; i < size * size; i++) {
-                canvas[i * 4] = 91;      // R (brand purple)
-                canvas[i * 4 + 1] = 95;  // G
-                canvas[i * 4 + 2] = 199; // B
+                canvas[i * 4] = 232;     // R (brand orange)
+                canvas[i * 4 + 1] = 93;  // G
+                canvas[i * 4 + 2] = 4;   // B
                 canvas[i * 4 + 3] = 255; // A
             }
             icon = nativeImage.createFromBuffer(canvas, { width: size, height: size });
@@ -198,48 +209,115 @@ function createTray() {
     }
 }
 
-const TOGGLE_FILE = path.join(os.tmpdir(), 'oblysk-toggle');
-const TOGGLE_SCRIPT = path.join(os.tmpdir(), 'oblysk-toggle.sh');
-const KEYBINDING_PATH = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/oblysk-toggle/';
+const WAYLAND_ACTION_FILE = path.join(os.tmpdir(), 'oblysk-action');
+const WAYLAND_ACTION_SCRIPT = path.join(os.tmpdir(), 'oblysk-action.sh');
+const WAYLAND_KEYBINDING_BASE = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/';
 
-function setupWaylandToggle() {
-    // Write the toggle script
-    fs.writeFileSync(TOGGLE_SCRIPT, `#!/bin/bash\ntouch "${TOGGLE_FILE}"\n`, { mode: 0o755 });
-    // Clean any stale toggle file
-    try { fs.unlinkSync(TOGGLE_FILE); } catch(e) {}
+// All Wayland hotkeys: action name → GNOME binding string
+const WAYLAND_ACTIONS = {
+    'toggle':  '<Ctrl><Alt>o',
+    'paste:1': '<Ctrl><Alt>1',
+    'paste:2': '<Ctrl><Alt>2',
+    'paste:3': '<Ctrl><Alt>3',
+    'paste:4': '<Ctrl><Alt>4',
+    'paste:5': '<Ctrl><Alt>5',
+    'paste:6': '<Ctrl><Alt>6',
+    'paste:7': '<Ctrl><Alt>7',
+    'paste:8': '<Ctrl><Alt>8',
+    'paste:9': '<Ctrl><Alt>9',
+    'capture': '<Ctrl><Alt>c',
+    'ondeck':  '<Ctrl><Alt>v',
+    'reverse': '<Ctrl><Alt>r',
+};
 
-    // Register GNOME custom keybinding
+function setupWaylandHotkeys() {
+    // Write action script: accepts action name as $1, appends to action file
+    fs.writeFileSync(WAYLAND_ACTION_SCRIPT,
+        `#!/bin/bash\necho "$1" >> "${WAYLAND_ACTION_FILE}"\n`,
+        { mode: 0o755 }
+    );
+    // Clean any stale action file
+    try { fs.unlinkSync(WAYLAND_ACTION_FILE); } catch(e) {}
+
+    // Register all GNOME custom keybindings
     try {
-        const current = execSync('gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings').toString().trim();
-        if (!current.includes('oblysk-toggle')) {
-            let newList;
-            if (current === '@as []') {
-                newList = `['${KEYBINDING_PATH}']`;
-            } else {
-                newList = current.replace(/]$/, `, '${KEYBINDING_PATH}']`);
+        // Read current keybinding list and filter out any stale oblysk entries
+        let current = execSync('gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings').toString().trim();
+        let paths = [];
+        if (current !== '@as []') {
+            const matches = current.match(/'([^']+)'/g);
+            if (matches) {
+                paths = matches.map(m => m.replace(/'/g, ''));
             }
-            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "${newList}"`);
         }
-        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} name "Oblysk Toggle"`);
-        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} command "${TOGGLE_SCRIPT}"`);
-        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${KEYBINDING_PATH} binding "<Ctrl><Alt>o"`);
-        logger.log('success', 'hotkeys', 'Wayland toggle keybinding registered (Ctrl+Alt+O)');
+        paths = paths.filter(p => !p.includes('/oblysk-'));
+
+        // Build keybinding paths for all actions
+        const actionEntries = Object.entries(WAYLAND_ACTIONS);
+        const oblyskPaths = actionEntries.map(([action]) =>
+            `${WAYLAND_KEYBINDING_BASE}oblysk-${action.replace(':', '-')}/`
+        );
+
+        // Register the combined list
+        const allPaths = [...paths, ...oblyskPaths];
+        const pathList = allPaths.map(p => `'${p}'`).join(', ');
+        execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[${pathList}]"`);
+
+        // Set properties for each keybinding
+        for (const [action, binding] of actionEntries) {
+            const kbPath = `${WAYLAND_KEYBINDING_BASE}oblysk-${action.replace(':', '-')}/`;
+            const label = action === 'toggle' ? 'Oblysk Toggle' : `Oblysk ${action}`;
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${kbPath} name "'${label}'"`);
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${kbPath} command "'${WAYLAND_ACTION_SCRIPT} ${action}'"`);
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${kbPath} binding "'${binding}'"`);;
+        }
+
+        logger.log('success', 'hotkeys', `Registered ${actionEntries.length} Wayland GNOME keybindings`);
     } catch (err) {
-        logger.log('error', 'hotkeys', 'Failed to register GNOME keybinding', { error: err.message });
+        logger.log('error', 'hotkeys', 'Failed to register GNOME keybindings', { error: err.message });
     }
 
-    // Poll for the toggle file
-    togglePollInterval = setInterval(() => {
+    // Poll for action file (supports rapid-fire: reads all lines, truncates)
+    waylandPollInterval = setInterval(() => {
+        let data;
         try {
-            fs.accessSync(TOGGLE_FILE);
-            // Toggle file exists — consume it and toggle
-            fs.unlinkSync(TOGGLE_FILE);
-            toggleWindow();
+            data = fs.readFileSync(WAYLAND_ACTION_FILE, 'utf8');
+            fs.writeFileSync(WAYLAND_ACTION_FILE, '');
         } catch(e) {
-            // File doesn't exist, nothing to do
+            return; // file doesn't exist yet, nothing to do
+        }
+        if (!data.trim()) return;
+        const actions = data.trim().split('\n');
+        for (const action of actions) {
+            dispatchWaylandAction(action.trim());
         }
     }, 150);
-    logger.log('info', 'hotkeys', 'Wayland toggle file polling started');
+    logger.log('info', 'hotkeys', 'Wayland action file polling started');
+}
+
+function dispatchWaylandAction(action) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    if (action === 'toggle') {
+        toggleWindow();
+    } else if (action.startsWith('paste:')) {
+        const n = parseInt(action.split(':')[1], 10);
+        if (n >= 1 && n <= 9) {
+            mainWindow.webContents.send('paste-cell', n);
+            logger.log('info', 'hotkey', `Paste cell ${n} triggered (Wayland)`);
+        }
+    } else if (action === 'capture') {
+        mainWindow.webContents.send('copy-to-notepad');
+        logger.log('info', 'hotkey', 'Copy to notepad triggered (Wayland)');
+    } else if (action === 'ondeck') {
+        mainWindow.webContents.send('paste-on-deck');
+        logger.log('info', 'hotkey', 'On-deck paste triggered (Wayland)');
+    } else if (action === 'reverse') {
+        mainWindow.webContents.send('reverse-copy');
+        logger.log('info', 'hotkey', 'Reverse copy triggered (Wayland)');
+    } else {
+        logger.log('warn', 'hotkey', `Unknown Wayland action: ${action}`);
+    }
 }
 
 function toggleWindow() {
@@ -252,25 +330,45 @@ function toggleWindow() {
     logger.log('info', 'hotkey', 'Toggle window visibility (Wayland)');
 }
 
-function cleanupWaylandToggle() {
-    if (togglePollInterval) {
-        clearInterval(togglePollInterval);
-        togglePollInterval = null;
+function cleanupWaylandHotkeys() {
+    if (waylandPollInterval) {
+        clearInterval(waylandPollInterval);
+        waylandPollInterval = null;
     }
-    try { fs.unlinkSync(TOGGLE_FILE); } catch(e) {}
-    try { fs.unlinkSync(TOGGLE_SCRIPT); } catch(e) {}
-    // Remove GNOME keybinding
+    try { fs.unlinkSync(WAYLAND_ACTION_FILE); } catch(e) {}
+    try { fs.unlinkSync(WAYLAND_ACTION_SCRIPT); } catch(e) {}
+
+    // Remove all oblysk GNOME keybindings
     try {
         const current = execSync('gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings').toString().trim();
-        if (current.includes('oblysk-toggle')) {
-            const newList = current
-                .replace(new RegExp(",?\\s*'" + KEYBINDING_PATH.replace(/\//g, '\\/') + "'"), '')
-                .replace("[ ,", "[")
-                .replace(", ]", "]");
-            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "${newList}"`);
+        let paths = [];
+        if (current !== '@as []') {
+            const matches = current.match(/'([^']+)'/g);
+            if (matches) {
+                paths = matches.map(m => m.replace(/'/g, ''));
+            }
+        }
+
+        // Filter out all oblysk entries
+        const cleanPaths = paths.filter(p => !p.includes('/oblysk-'));
+
+        // Reset individual keybinding dconf keys so they don't linger
+        const oblyskPaths = paths.filter(p => p.includes('/oblysk-'));
+        for (const kbPath of oblyskPaths) {
+            try {
+                execSync(`dconf reset -f ${kbPath}`);
+            } catch(e) {}
+        }
+
+        // Update the keybinding list
+        if (cleanPaths.length === 0) {
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[]"`);
+        } else {
+            const pathList = cleanPaths.map(p => `'${p}'`).join(', ');
+            execSync(`gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "[${pathList}]"`);
         }
     } catch(e) {}
-    logger.log('info', 'hotkeys', 'Wayland toggle cleaned up');
+    logger.log('info', 'hotkeys', 'Wayland hotkeys cleaned up');
 }
 
 function showMainWindow() {
@@ -345,7 +443,7 @@ function createWindow() {
         minHeight: 500,
         frame: false,
         transparent: false,
-        backgroundColor: '#1a1a1a',
+        backgroundColor: '#0a0c0f',
         resizable: true,
         alwaysOnTop: true,
         skipTaskbar: false,
@@ -401,6 +499,13 @@ function createWindow() {
 
 // ─── Hotkey Setup ───────────────────────────────────────────────────────────
 function setupHotkeys() {
+    // On Wayland, GNOME keybindings handle all hotkeys at compositor level.
+    // globalShortcut grabs keys and prevents GNOME from seeing them, so skip it entirely.
+    if (IS_LINUX && linuxDisplayServer === 'wayland') {
+        logger.log('info', 'hotkeys', 'Skipping globalShortcut on Wayland (GNOME keybindings active)');
+        return;
+    }
+
     logger.log('info', 'hotkeys', `Setting up global hotkeys on ${PLATFORM_NAME}`);
 
     globalShortcut.unregisterAll();
@@ -450,8 +555,8 @@ function setupHotkeys() {
         }
     }
 
-    // Ctrl+Alt+O toggle is handled by the X11 hotkey listener (SIGUSR1), not globalShortcut.
-    // This avoids the Electron/Linux bug where globalShortcut stops firing after hide().
+    // On Wayland, all hotkeys are handled via GNOME custom keybindings + file-based IPC
+    // (setupWaylandHotkeys). globalShortcut is kept as fallback for X11/Windows/macOS.
 
     const additionalHotkeys = [
         {
@@ -712,46 +817,75 @@ async function pasteViaShellWindows(text, requestId) {
     return { ...result, method: 'powershell' };
 }
 
-// ─── Linux: xdotool (X11) / wtype (Wayland) ────────────────────────────────
-async function simulateKeystrokesLinux(text, delay, requestId) {
-    logger.log('info', 'paste', `[${requestId}] Using Linux keystroke simulation (${linuxDisplayServer})`);
+// ─── Linux: input simulation ─────────────────────────────────────────────────
+// On GNOME Wayland: xdotool silently fails, wtype is blocked by compositor.
+// ydotool uses kernel-level /dev/uinput — works everywhere.
+// xclip sets X11 clipboard which GNOME bridges to Wayland automatically.
+const isGnomeWayland = IS_LINUX && linuxDisplayServer === 'wayland' && linuxDesktop === 'gnome';
 
-    if (linuxDisplayServer === 'wayland' && hasCommand('wtype')) {
-        // wtype handles the full string at once
+// Set clipboard reliably on Linux (xclip via X11→Wayland bridge on GNOME)
+function setClipboardLinux(text) {
+    if (hasCommand('xclip')) {
+        const proc = spawn('xclip', ['-selection', 'clipboard'], { stdio: ['pipe', 'ignore', 'ignore'] });
+        proc.stdin.write(text);
+        proc.stdin.end();
+        return;
+    }
+    clipboard.writeText(text);
+}
+
+async function simulateKeystrokesLinux(text, delay, requestId) {
+    logger.log('info', 'paste', `[${requestId}] Linux keystroke sim (${linuxDisplayServer}/${linuxDesktop || 'unknown'})`);
+
+    // ydotool: kernel-level input, works on ALL compositors including GNOME Wayland
+    if (hasCommand('ydotool')) {
+        const result = await executeCommand('ydotool', ['type', '--key-delay', String(delay), '--', text], 30000, requestId);
+        if (result.success) return { ...result, method: 'ydotool' };
+        logger.log('warn', 'paste', `[${requestId}] ydotool failed, trying next method`);
+    }
+
+    // wtype: works on wlroots compositors (Sway, Hyprland) only
+    if (canUseWtype && hasCommand('wtype')) {
         const result = await executeCommand('wtype', ['-d', String(delay), '--', text], 30000, requestId);
         return { ...result, method: 'wtype' };
     }
 
-    if (hasCommand('xdotool')) {
-        // xdotool type with configurable delay
+    // xdotool: works on X11 and XWayland apps only (silently fails on native Wayland)
+    if (linuxDisplayServer === 'x11' && hasCommand('xdotool')) {
         const result = await executeCommand('xdotool', ['type', '--delay', String(delay), '--clearmodifiers', '--', text], 30000, requestId);
         return { ...result, method: 'xdotool' };
     }
 
-    // Fallback: try ydotool (works on both X11 and Wayland, needs root/ydotoold)
-    if (hasCommand('ydotool')) {
-        const result = await executeCommand('ydotool', ['type', '--key-delay', String(delay), '--', text], 30000, requestId);
-        return { ...result, method: 'ydotool' };
-    }
-
-    return { success: false, error: 'No typing tool found. Install xdotool (X11) or wtype (Wayland): sudo apt install xdotool wtype' };
+    // Last resort: copy to clipboard
+    setClipboardLinux(text);
+    return { success: true, message: 'Copied to clipboard \u2014 Ctrl+V to paste', method: 'clipboard-only' };
 }
 
 async function pasteViaClipboardLinux(text, requestId) {
-    clipboard.writeText(text);
+    // Set clipboard via xclip (reliable on GNOME Wayland via X11 bridge)
+    setClipboardLinux(text);
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (linuxDisplayServer === 'wayland' && hasCommand('wtype')) {
+    // Simulate Ctrl+V: ydotool (kernel-level, works everywhere)
+    if (hasCommand('ydotool')) {
+        // key codes: 29=KEY_LEFTCTRL, 47=KEY_V; :1=press, :0=release
+        const result = await executeCommand('ydotool', ['key', '29:1', '47:1', '47:0', '29:0'], 3000, requestId);
+        if (result.success) return { ...result, method: 'clipboard' };
+    }
+
+    // wtype for wlroots
+    if (canUseWtype && hasCommand('wtype')) {
         const result = await executeCommand('wtype', ['-M', 'ctrl', '-k', 'v', '-m', 'ctrl'], 3000, requestId);
         return { ...result, method: 'clipboard' };
     }
 
-    if (hasCommand('xdotool')) {
+    // xdotool for X11 only
+    if (linuxDisplayServer === 'x11' && hasCommand('xdotool')) {
         const result = await executeCommand('xdotool', ['key', '--clearmodifiers', 'ctrl+v'], 3000, requestId);
         return { ...result, method: 'clipboard' };
     }
 
-    return { success: false, error: 'No key simulation tool found. Install xdotool or wtype.' };
+    return { success: true, message: 'Copied to clipboard \u2014 Ctrl+V to paste', method: 'clipboard-only' };
 }
 
 async function pasteViaShellLinux(text, requestId) {
@@ -963,7 +1097,7 @@ app.whenReady().then(() => {
     // On Wayland, Electron's globalShortcut breaks when windows are hidden.
     // Use GNOME custom keybinding + file-based IPC instead.
     if (IS_LINUX && linuxDisplayServer === 'wayland') {
-        setupWaylandToggle();
+        setupWaylandHotkeys();
     }
 
     app.on('activate', () => {
@@ -989,7 +1123,7 @@ app.on('before-quit', () => {
     logger.log('info', 'app', 'App quitting, cleaning up');
     isQuitting = true;
     globalShortcut.unregisterAll();
-    cleanupWaylandToggle();
+    cleanupWaylandHotkeys();
     stopClipboardMonitoring();
 });
 

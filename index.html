@@ -560,9 +560,16 @@
             border: 1px solid var(--border-color);
             border-radius: 6px;
             color: var(--text-primary);
-            padding: 4px 8px;
+            padding: 4px 12px;
             font-size: 11px;
             outline: none;
+            cursor: pointer;
+            user-select: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .method-select:hover {
+            border-color: var(--accent-primary);
         }
 
         .speed-control {
@@ -1710,11 +1717,7 @@
         <div class="bottom-bar">
             <div class="paste-method">
                 <label>Method:</label>
-                <select class="method-select" id="paste-method">
-                    <option value="keystrokes">Keystrokes</option>
-                    <option value="clipboard">Clipboard</option>
-                    <option value="powershell">Shell Paste</option>
-                </select>
+                <div class="method-select" id="paste-method" data-value="keystrokes">Keystrokes ▸</div>
             </div>
             <div class="speed-control">
                 <label>Speed:</label>
@@ -2519,7 +2522,9 @@ ${'='.repeat(50)}`
             document.getElementById('entry-count').textContent = config.clipboardHistory.length;
             
             // Set initial method selection
-            document.getElementById('paste-method').value = config.pasteMethod;
+            const initMethodNames = { keystrokes: 'Keystrokes', clipboard: 'Clipboard', powershell: 'Shell Paste' };
+            document.getElementById('paste-method').dataset.value = config.pasteMethod;
+            document.getElementById('paste-method').textContent = (initMethodNames[config.pasteMethod] || 'Keystrokes') + ' \u25B8';
             document.getElementById('typing-speed').value = config.typingSpeed;
             document.getElementById('speed-value').textContent = `${config.typingSpeed}ms`;
             
@@ -2572,7 +2577,7 @@ ${'='.repeat(50)}`
 
         // IPC Event Handlers for main process communication
         if (isElectron && ipcRenderer) {
-            ipcRenderer.on('paste-cell', async (event, cellNumber) => {
+            ipcRenderer.on('paste-cell', async (cellNumber) => {
                 debugLogger.log('info', 'ipc', `Received paste-cell event: ${cellNumber}`);
                 await pasteCell(cellNumber);
             });
@@ -2582,7 +2587,7 @@ ${'='.repeat(50)}`
                 await captureClipboard();
             });
             
-            ipcRenderer.on('clipboard-changed', (event, text) => {
+            ipcRenderer.on('clipboard-changed', (text) => {
                 debugLogger.log('debug', 'clipboard', `Clipboard changed: ${text.length} chars`);
                 
                 // Check if reverse copy should handle this
@@ -2605,7 +2610,7 @@ ${'='.repeat(50)}`
                 await reverseCapture.forceGrab();
             });
             
-            ipcRenderer.on('hotkey-registration-complete', (event, data) => {
+            ipcRenderer.on('hotkey-registration-complete', (data) => {
                 debugLogger.log('info', 'hotkeys', 'Hotkey registration completed', data);
                 
                 if (data.failed && data.failed.length > 0) {
@@ -2615,7 +2620,7 @@ ${'='.repeat(50)}`
                 }
             });
             
-            ipcRenderer.on('main-process-log', (event, logEntry) => {
+            ipcRenderer.on('main-process-log', (logEntry) => {
                 // Display main process logs in debug panel if needed
                 if (debugMode) {
                     debugLogger.log(logEntry.level, `main-${logEntry.category}`, logEntry.message, logEntry.data);
@@ -2742,23 +2747,19 @@ ${'='.repeat(50)}`
         function setupEventListeners() {
             debugLogger.log('info', 'events', 'Setting up event listeners');
             
-            // Paste method change with state reset
-            document.getElementById('paste-method').addEventListener('change', (e) => {
+            // Paste method click-to-cycle
+            const methodNames = { keystrokes: 'Keystrokes', clipboard: 'Clipboard', powershell: 'Shell Paste' };
+            const methodOrder = ['keystrokes', 'clipboard', 'powershell'];
+            document.getElementById('paste-method').addEventListener('click', () => {
                 const oldMethod = config.pasteMethod;
-                config.pasteMethod = e.target.value;
-                
-                // Reset any method-specific state
-                if (oldMethod !== e.target.value) {
-                    debugLogger.log('info', 'settings', `Paste method changed: ${oldMethod} → ${e.target.value}`);
-                    
-                    // Clear any cached state that might interfere
-                    if (oldMethod === 'powershell') {
-                        debugLogger.log('info', 'settings', 'Clearing PowerShell-specific state');
-                    }
-                }
-                
+                const idx = methodOrder.indexOf(oldMethod);
+                const newMethod = methodOrder[(idx + 1) % methodOrder.length];
+                config.pasteMethod = newMethod;
+                document.getElementById('paste-method').dataset.value = newMethod;
+                document.getElementById('paste-method').textContent = methodNames[newMethod] + ' \u25B8';
+                debugLogger.log('info', 'settings', `Paste method changed: ${oldMethod} → ${newMethod}`);
                 saveConfig();
-                showToast(`Paste method: ${e.target.value}`, 'success');
+                showToast(`Paste method: ${methodNames[newMethod]}`, 'success');
             });
             
             // Speed slider
@@ -3471,7 +3472,9 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
                 }
                 
                 // Apply loaded configuration
-                document.getElementById('paste-method').value = config.pasteMethod;
+                const loadMethodNames = { keystrokes: 'Keystrokes', clipboard: 'Clipboard', powershell: 'Shell Paste' };
+                document.getElementById('paste-method').dataset.value = config.pasteMethod;
+                document.getElementById('paste-method').textContent = (loadMethodNames[config.pasteMethod] || 'Keystrokes') + ' \u25B8';
                 document.getElementById('typing-speed').value = config.typingSpeed;
                 document.getElementById('speed-value').textContent = `${config.typingSpeed}ms`;
                 

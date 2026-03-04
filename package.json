@@ -1,6 +1,6 @@
 {
   "name": "oblysk",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Cross-platform console paste tool for Windows, Linux, and macOS",
   "main": "main.js",
   "author": {
@@ -12,7 +12,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --no-sandbox",
     "build": "electron-builder",
     "build-win": "electron-builder --windows nsis --windows portable",
     "build-linux": "electron-builder --linux AppImage deb",
