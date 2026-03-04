@@ -1796,21 +1796,21 @@
     <div class="dev-info-dialog" id="dev-info-dialog">
         <div class="dev-info-content">
             <button class="dev-info-close" onclick="closeDevInfo()">×</button>
-            <div class="dev-info-title">🎮 Anarchy Games</div>
+            <div class="dev-info-title">🎮 AnarchyGames.org</div>
             
             <div class="dev-info-item">
                 <div class="dev-info-icon">👤</div>
-                <span class="dev-info-link">Anarchy Games</span>
+                <span class="dev-info-link">AnarchyGames.org</span>
             </div>
             
             <div class="dev-info-item" onclick="openEmail()">
                 <div class="dev-info-icon">📧</div>
-                <a href="#" class="dev-info-link" onclick="openEmail(); return false;">support@anarchygames.net</a>
+                <a href="#" class="dev-info-link" onclick="openEmail(); return false;">dev@anarchygames.org</a>
             </div>
             
             <div class="dev-info-item" onclick="openWebsite()">
                 <div class="dev-info-icon">🌐</div>
-                <a href="#" class="dev-info-link" onclick="openWebsite(); return false;">anarchygames.net</a>
+                <a href="#" class="dev-info-link" onclick="openWebsite(); return false;">anarchygames.org</a>
             </div>
             
             <a href="#" class="donate-btn" onclick="openDonate(); return false;">
@@ -3494,9 +3494,9 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function openEmail() {
             if (isElectron && window.electron) {
-                window.electron.shell.openExternal('mailto:support@anarchygames.net');
+                window.electron.shell.openExternal('mailto:dev@anarchygames.org');
             } else {
-                window.open('mailto:support@anarchygames.net', '_blank');
+                window.open('mailto:dev@anarchygames.org', '_blank');
             }
             showToast('Opening email client...', 'success');
             debugLogger.log('info', 'external', 'Email link opened');
@@ -3504,9 +3504,9 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function openWebsite() {
             if (isElectron && window.electron) {
-                window.electron.shell.openExternal('https://anarchygames.net');
+                window.electron.shell.openExternal('https://anarchygames.org');
             } else {
-                window.open('https://anarchygames.net', '_blank');
+                window.open('https://anarchygames.org', '_blank');
             }
             showToast('Opening website...', 'success');
             debugLogger.log('info', 'external', 'Website link opened');
@@ -3514,9 +3514,9 @@ drwxr-xr-x 3 user user 4096 Jan 1 11:59 ..
 
         function openDonate() {
             if (isElectron && window.electron) {
-                window.electron.shell.openExternal('https://anarchygames.net/donate');
+                window.electron.shell.openExternal('https://anarchygames.org/donate');
             } else {
-                window.open('https://anarchygames.net/donate', '_blank');
+                window.open('https://anarchygames.org/donate', '_blank');
             }
             showToast('Thank you for supporting development! 💝', 'success');
             debugLogger.log('info', 'external', 'Donate link opened');

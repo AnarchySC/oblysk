@@ -1,13 +1,13 @@
 {
   "name": "oblysk",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Cross-platform console paste tool for Windows, Linux, and macOS",
   "main": "main.js",
   "author": {
-    "name": "Anarchy Games",
-    "email": "contact@anarchygames.net"
+    "name": "AnarchyGames.org",
+    "email": "dev@anarchygames.org"
   },
-  "homepage": "https://anarchygames.net",
+  "homepage": "https://anarchygames.org",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -26,7 +26,7 @@
   "build": {
     "appId": "com.anarchygames.oblysk",
     "productName": "Oblysk",
-    "copyright": "Copyright © 2025 Anarchy Games",
+    "copyright": "Copyright © 2025-2026 AnarchyGames.org",
     "directories": {
       "output": "dist"
     },
