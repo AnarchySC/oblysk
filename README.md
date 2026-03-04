@@ -1,12 +1,33 @@
-# Oblysk - Smart Clipboard Manager
+<div align="center">
 
-**Cross-platform clipboard management tool designed for virtual consoles, remote sessions, and power users.**
+```
+╔══════════════════════════════════════════════╗
+║                                              ║
+║    ████  ████  █    █   █ ████ █   █         ║
+║   █    █ █   █ █    █   █ █    █  █          ║
+║   █    █ ████  █    ████  ████ ███           ║
+║   █    █ █   █ █    █  █  █    █  █          ║
+║    ████  ████  ████ █   █ ████ █   █         ║
+║   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ║
+║   Smart clipboard manager for virtual        ║
+║   consoles, remote sessions, and power users ║
+║                                              ║
+╚══════════════════════════════════════════════╝
+```
 
-[![Release](https://img.shields.io/github/v/release/AnarchySC/oblysk)](https://github.com/AnarchySC/oblysk/releases)
-[![License](https://img.shields.io/github/license/AnarchySC/oblysk)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/AnarchySC/oblysk/total)](https://github.com/AnarchySC/oblysk/releases)
+[![MIT](https://img.shields.io/badge/license-MIT-E85D04?style=flat-square)](LICENSE)
+[![Cross-platform](https://img.shields.io/badge/platform-Windows_|_Linux_|_macOS-00d4ff?style=flat-square)]()
+[![Electron](https://img.shields.io/badge/built_with-Electron-FAA307?style=flat-square)]()
+[![AnarchyGames](https://img.shields.io/badge/by-AnarchyGames.org-E85D04?style=flat-square)](https://anarchygames.org)
+
+*Building things that should exist.*
+
+</div>
 
 ---
+
+[![Release](https://img.shields.io/github/v/release/AnarchySC/oblysk)](https://github.com/AnarchySC/oblysk/releases)
+[![Downloads](https://img.shields.io/github/downloads/AnarchySC/oblysk/total)](https://github.com/AnarchySC/oblysk/releases)
 
 ## Why Oblysk?
 
@@ -238,10 +259,18 @@ npm run build-all    # Build for all platforms
 
 ---
 
-## License
+<div align="center">
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+## Support
+
+If Oblysk makes your workflow easier, consider buying me a coffee.
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support_Oblysk-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/cassettefuture)
 
 ---
 
-*Built with love for system administrators, developers, and power users who need reliable clipboard management in challenging environments.*
+MIT License. See [LICENSE](LICENSE).
+
+An [AnarchyGames.org](https://anarchygames.org) project.
+
+</div>
